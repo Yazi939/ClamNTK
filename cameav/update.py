@@ -67,9 +67,21 @@ def github_coordinates() -> tuple[str, str] | None:
     return None
 
 
+def _coordinates_from_readme() -> tuple[str, str] | None:
+    readme = Path(__file__).resolve().parents[1] / "README.md"
+    try:
+        text = readme.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(r"github\.com[:/]([^/\s:]+)/([^/\s)]+?)(?:\.git)?(?=[\s)\].]|$)", text)
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
+
+
 def write_channel_file() -> bool:
     """Файл поставки для установленного пакета. В git он не входит."""
-    found = _coordinates_from_git()
+    found = _coordinates_from_git() or _coordinates_from_readme()
     if found is None:
         return False
     owner, repo = found

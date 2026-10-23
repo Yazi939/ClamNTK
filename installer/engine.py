@@ -213,6 +213,7 @@ def write_install_script(rpm_path: Path | None = None) -> Path:
 set -euo pipefail
 ROOT={root}
 python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cameav.runtime import install_missing; install_missing()' "$ROOT"
+python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cameav.update import write_channel_file; write_channel_file()' "$ROOT"
 echo "ClamNTK: зависимости готовы, ставится оболочка"
 {_shell_install_lines(rpm_path)}
 echo "ClamNTK установлен"
