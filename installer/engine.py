@@ -197,8 +197,13 @@ rm -rf /usr/share/cameav/cameav
 cp -a "{root}/cameav" /usr/share/cameav/cameav
 find /usr/share/cameav -type d -name __pycache__ -print0 | xargs -0 -r rm -rf
 install -D -m 755 "{root}/bin/cameav" /usr/bin/cameav
+install -D -m 755 "{root}/bin/cameav-uninstall" /usr/bin/cameav-uninstall
 install -D -m 755 "{root}/libexec/cameav-privileged" /usr/libexec/cameav-privileged
+rm -rf /usr/share/cameav/installer
+cp -a "{root}/installer" /usr/share/cameav/installer
+find /usr/share/cameav/installer -type d -name __pycache__ -print0 | xargs -0 -r rm -rf
 install -D -m 644 "{root}/share/applications/cameav.desktop" /usr/share/applications/cameav.desktop
+install -D -m 644 "{root}/share/applications/cameav-uninstall.desktop" /usr/share/applications/cameav-uninstall.desktop
 install -D -m 644 "{root}/share/polkit/ru.redos.cameav.policy" /usr/share/polkit-1/actions/ru.redos.cameav.policy
 mkdir -p /usr/share/icons/hicolor
 cp -a "{root}/share/icons/hicolor/." /usr/share/icons/hicolor/
@@ -232,7 +237,71 @@ def files_copied_without_package() -> bool:
     return cameav_registered() is None and Path("/usr/bin/cameav").is_file()
 
 
-def command_for(action: str, rpm_path: Path | None = None) -> list[str]:
+def shell_present() -> bool:
+    return cameav_registered() is not None or Path("/usr/bin/cameav").is_file() or Path("/usr/share/cameav").is_dir()
+
+
+def write_remove_script(*, clamav: bool = False, user_data: bool = False) -> Path:
+    """Скрипт для pkexec: снять оболочку и только отмеченные части."""
+    clamav_flag = "1" if clamav else "0"
+    data_flag = "1" if user_data else "0"
+    body = f"""#!/bin/bash
+set -euo pipefail
+if rpm -q cameav >/dev/null 2>&1; then
+  dnf remove -y cameav
+fi
+rm -f /usr/bin/cameav /usr/bin/cameav-uninstall
+rm -f /usr/libexec/cameav-privileged
+rm -rf /usr/share/cameav
+rm -f /usr/share/applications/cameav.desktop
+rm -f /usr/share/applications/cameav-uninstall.desktop
+rm -f /usr/share/polkit-1/actions/ru.redos.cameav.policy
+rm -f /usr/share/icons/hicolor/scalable/apps/cameav.svg
+find /usr/share/icons/hicolor -path '*/apps/cameav.png' -delete
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+if [[ "{clamav_flag}" == 1 ]]; then
+  if rpm -q clamav >/dev/null 2>&1; then
+    dnf remove -y clamav
+  fi
+  rm -rf /usr/local/share/clamav
+  rm -f /usr/local/etc/freshclam.conf /usr/local/etc/clamd.conf
+  rm -f /usr/local/etc/freshclam.conf.sample /usr/local/etc/clamd.conf.sample
+fi
+if [[ "{data_flag}" == 1 ]]; then
+  uid="${{PKEXEC_UID:-}}"
+  if [[ -n "$uid" && "$uid" != 0 ]]; then
+    home=$(getent passwd "$uid" | cut -d: -f6)
+    case "$home" in
+      /home/*|/root)
+        rm -rf "$home/.config/cameav" "$home/.local/share/cameav"
+        runtime="/run/user/${{uid}}/cameav"
+        if [[ -f "$runtime/clamd.pid" ]]; then
+          pid=$(tr -cd '0-9' < "$runtime/clamd.pid")
+          if [[ -n "$pid" && -r "/proc/$pid/cmdline" ]] && tr '\\0' ' ' < "/proc/$pid/cmdline" | grep -q clamd; then
+            kill "$pid" || true
+          fi
+        fi
+        rm -rf "$runtime"
+        ;;
+    esac
+  fi
+fi
+echo "ClamNTK снят"
+"""
+    path = Path(f"/tmp/clamntk-remove-{os.getuid()}.sh")
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o700)
+    return path
+
+
+def command_for(
+    action: str,
+    rpm_path: Path | None = None,
+    *,
+    remove_clamav: bool = False,
+    remove_user_data: bool = False,
+) -> list[str]:
     if action == "install":
         if source_tree_ready():
             command = ["bash", str(write_install_script(rpm_path))]
@@ -247,7 +316,7 @@ def command_for(action: str, rpm_path: Path | None = None) -> list[str]:
         else:
             raise RuntimeError("Не найдены файлы оболочки ClamNTK.")
     elif action == "remove":
-        command = ["dnf", "remove", "-y", "cameav"]
+        command = ["bash", str(write_remove_script(clamav=remove_clamav, user_data=remove_user_data))]
     else:
         raise RuntimeError(f"Неизвестное действие: {action}")
     if os.geteuid() == 0:

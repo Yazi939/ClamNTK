@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Удалить ClamNTK
+GenericName=Удаление
+Comment=Снять ClamNTK с РЕД ОС
+Exec=cameav-uninstall
+Icon=cameav
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Графическое удаление ClamNTK."""
+
+from __future__ import annotations
+
+import os
+import sys
+
+
+def package_root() -> str:
+    here = os.path.dirname(os.path.realpath(__file__))
+    local = os.path.abspath(os.path.join(here, ".."))
+    local_main = os.path.join(local, "cameav", "__main__.py")
+    system_main = "/usr/share/cameav/cameav/__main__.py"
+    if os.path.basename(here) == "bin" and os.path.isfile(local_main):
+        return local
+    if os.path.isfile(system_main):
+        return "/usr/share/cameav"
+    if os.path.isfile(local_main):
+        return local
+    sys.stderr.write("Не найдены файлы ClamNTK.\n")
+    raise SystemExit(1)
+
+
+def main() -> int:
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("QT_QPA_PLATFORM"):
+        sys.stderr.write("Запустите удаление в графическом сеансе РЕД ОС.\n")
+        return 1
+    root = package_root()
+    os.chdir(root)
+    sys.path.insert(0, root)
+    from installer.uninstall import main as uninstall_main
+
+    return uninstall_main()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

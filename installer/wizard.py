@@ -395,7 +395,9 @@ class SetupWindow(QMainWindow):
             label.style().polish(label)
         running = self.worker_thread is not None
         self.back_button.setEnabled(index > 0 and not running and index < 3)
-        self.remove_button.setVisible(index == 2 and cameav_registered() is not None)
+        self.remove_button.setVisible(
+            index == 2 and (cameav_registered() is not None or files_copied_without_package())
+        )
         self.remove_button.setEnabled(not running)
         if index == 0:
             self.next_button.setText("Далее")
@@ -431,7 +433,7 @@ class SetupWindow(QMainWindow):
         answer = QMessageBox.question(
             self,
             "Удаление ClamNTK",
-            "Удалить ClamNTK из системы? ClamAV и остальные зависимости останутся.",
+            "Удалить оболочку ClamNTK? ClamAV останется. Полный выбор есть в «Удалить ClamNTK».",
             QMessageBox.Yes | QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
