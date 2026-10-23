@@ -34,10 +34,13 @@ from PyQt5.QtWidgets import (
 )
 
 from cameav import __version__
+from cameav.runtime import version_is_older
 from cameav.backend import (
     ScanOptions,
+    build_engine_upgrade_command,
     build_install_command,
     build_update_command,
+    explain_freshclam,
     can_modify,
     database_state,
     database_writable,
@@ -560,6 +563,10 @@ class MainWindow(QMainWindow):
         actions.addStretch(1)
         layout.addLayout(actions)
         layout.addWidget(self.auto_update_box)
+        self.db_note = QLabel("")
+        self.db_note.setObjectName("muted")
+        self.db_note.setWordWrap(True)
+        layout.addWidget(self.db_note)
         self.update_log = QPlainTextEdit()
         self.update_log.setReadOnly(True)
         self.update_log.setPlainText(self.store.read_update_log())
@@ -800,6 +807,17 @@ class MainWindow(QMainWindow):
                 card.set_values("Нет файла", "Будет загружен при обновлении")
             self.db_row.addWidget(card, 1)
         self.db_row.addStretch(0)
+        if self.engine.engine_version and version_is_older(self.engine.engine_version, "1.4.6"):
+            bytecode = next((item for item in self.engine.databases if item.name == "bytecode" and item.present), None)
+            number = f" Номер пакета bytecode сейчас {bytecode.version}, это не код ошибки." if bytecode else ""
+            self.db_note.setText(
+                f"Программа ClamAV {self.engine.engine_version} старше рекомендуемой 1.4.6. "
+                "Поэтому в журнале обновления появляется WARNING."
+                + number
+                + " Сами базы при этом загружены, проверка ими пользуется."
+            )
+        else:
+            self.db_note.setText("")
 
     def refresh_about(self) -> None:
         self.about_label.setText(
@@ -1052,7 +1070,18 @@ class MainWindow(QMainWindow):
                 self._tell("Обновление не запущено", str(exc))
             return
         self.show_page("updates")
-        self._start_command(command, "update", "Загрузка пакетов сигнатур…")
+        self._start_command(command, "update", "Загрузка пакетов сигнатур…", new_session=False)
+
+    def _start_engine_upgrade(self) -> None:
+        if self.busy():
+            return
+        try:
+            command = build_engine_upgrade_command()
+        except RuntimeError as exc:
+            self._tell("Обновление ClamAV", str(exc))
+            return
+        self.show_page("updates")
+        self._start_command(command, "engine", "Обновление программы ClamAV…", new_session=False)
 
     def install_packages(self, packages: list[str]) -> None:
         if self.busy():
@@ -1388,6 +1417,22 @@ class MainWindow(QMainWindow):
                     QTimer.singleShot(300, lambda: self.start_update(manual=True))
             elif code != 0:
                 self._tell("Установка", f"dnf завершился с кодом {code}. Подробности в журнале обновления.")
+        elif self.command_kind == "update":
+            report = explain_freshclam(self.update_log.toPlainText(), code)
+            self.update_log.appendPlainText(report.message)
+            self.store.write_update_log(self.update_log.toPlainText())
+            if report.ok:
+                QTimer.singleShot(400, self._warm_daemon)
+                if report.outdated and self._ask("Базы загружены", report.message + "\n\nПоставить рекомендуемую сборку ClamAV?", "Обновить ClamAV"):
+                    self._start_engine_upgrade()
+            else:
+                self._tell("Обновление баз", report.message)
+        elif self.command_kind == "engine":
+            if code == 0:
+                self.update_log.appendPlainText("Программа ClamAV обновлена. Закройте ClamNTK и откройте снова.")
+                self.db_note.setText("Программа ClamAV обновлена. Закройте ClamNTK и откройте снова, чтобы проверка взяла новую сборку.")
+            else:
+                self._tell("Обновление ClamAV", f"Сборка не установилась, код {code}. Подробности в журнале обновления.")
         elif code not in (0, 1):
             hint = self._freshclam_hint()
             text = f"freshclam завершился с кодом {code}."

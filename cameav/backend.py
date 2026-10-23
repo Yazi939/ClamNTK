@@ -346,6 +346,92 @@ def discover_engine() -> EngineInfo:
     )
 
 
+_UP_TO_DATE = re.compile(
+    r"(?P<name>daily|main|bytecode)\.cvd database is up-to-date \(version: (?P<version>\d+)"
+)
+_LOCAL_VERSION = re.compile(r"Local version:\s*([0-9.]+)")
+_RECOMMENDED_VERSION = re.compile(r"Recommended version:\s*([0-9.]+)")
+_PACKAGE_TITLES = {"daily": "ежедневные", "main": "основные", "bytecode": "bytecode"}
+
+
+@dataclass
+class FreshclamReport:
+    ok: bool
+    outdated: bool
+    message: str
+
+
+def explain_freshclam(text: str, code: int) -> FreshclamReport:
+    """Перевести журнал freshclam: WARNING и номер пакета не означают сбой загрузки."""
+    packages = [(match.group("name"), match.group("version")) for match in _UP_TO_DATE.finditer(text)]
+    local = _LOCAL_VERSION.search(text)
+    recommended = _RECOMMENDED_VERSION.search(text)
+    lowered = text.lower()
+    blocked = any(
+        marker in lowered
+        for marker in ("error code 429", "error code 403", "cool-down", "blocked by cdn", "rate limited")
+    )
+    downloaded = bool(packages) or "database updated" in lowered
+    outdated = "outdated" in lowered
+    if "сохранены из выпуска программы" in text:
+        return FreshclamReport(
+            ok=True,
+            outdated=False,
+            message=(
+                "Сервер ClamAV поставил лимит CDN и не отдал базы напрямую. "
+                "Пакеты сигнатур взяты из выпуска ClamNTK, их подпись проверена. Проверка может идти."
+            ),
+        )
+    if "лимит CDN не мешает проверке" in text:
+        return FreshclamReport(
+            ok=True,
+            outdated=False,
+            message="Сервер ClamAV ограничил обновление. Уже загруженные пакеты на месте, проверка может идти.",
+        )
+    if blocked and not downloaded:
+        return FreshclamReport(
+            ok=False,
+            outdated=outdated,
+            message=(
+                "Сервер баз ClamAV не отдал файлы и просит подождать. "
+                "Это ограничение сети, в журнале оно выглядит как WARNING и код 403 или 429. "
+                "Нажмите «Обновить базы» ещё раз не раньше чем через час, без повторных нажатий подряд."
+            ),
+        )
+    if code not in (0, 1) and not downloaded:
+        detail = ""
+        for line in reversed([item.strip() for item in text.splitlines() if item.strip()]):
+            if line.startswith(("WARNING:", "ERROR:")):
+                detail = line
+                break
+        message = "Базы сигнатур не загрузились."
+        if detail:
+            message = message + "\n" + detail
+        return FreshclamReport(ok=False, outdated=outdated, message=message)
+    names = ", ".join(f"{_PACKAGE_TITLES.get(name, name)} {version}" for name, version in packages)
+    if outdated:
+        local_text = local.group(1) if local else "старая"
+        recommended_text = recommended.group(1) if recommended else "более новая"
+        bytecode = next((version for name, version in packages if name == "bytecode"), "")
+        number = (
+            f" Номер {bytecode} у bytecode — версия этого пакета, не код ошибки."
+            if bytecode
+            else " Число у bytecode — версия пакета, не код ошибки."
+        )
+        return FreshclamReport(
+            ok=True,
+            outdated=True,
+            message=(
+                f"Базы сигнатур на месте{': ' + names if names else ''}.{number} "
+                f"WARNING в журнале значит другое: программа ClamAV версии {local_text}, "
+                f"а сайт рекомендует {recommended_text}. Проверка этими базами уже может идти."
+            ),
+        )
+    if names:
+        return FreshclamReport(ok=True, outdated=False, message=f"Базы сигнатур обновлены: {names}.")
+    return FreshclamReport(ok=code in (0, 1), outdated=False, message="Базы сигнатур обновлены.")
+
+
 def database_state(engine: EngineInfo) -> str:
     if not engine.clamscan:
         return "missing_engine"
@@ -465,9 +551,18 @@ def build_daemon_scan_command(config_path: Path, targets: list[str]) -> list[str
     return command
 
 
+def build_engine_upgrade_command() -> list[str]:
+    return admin_command(["clamav"])
+
+
 def build_update_command(engine: EngineInfo) -> list[str]:
     if not engine.freshclam:
         raise RuntimeError("Не найден freshclam. Установите пакет clamav.")
+    if helper_path() is not None:
+        update_args = ["update"]
+        if engine.database_dir:
+            update_args.extend(["--datadir", engine.database_dir])
+        return admin_command(update_args)
     direct: list[str] = []
     stdbuf = which("stdbuf")
     if stdbuf:
@@ -476,12 +571,7 @@ def build_update_command(engine: EngineInfo) -> list[str]:
     direct.append("--stdout")
     if engine.database_dir:
         direct.append(f"--datadir={engine.database_dir}")
-    if database_writable(engine):
-        return direct
-    update_args = ["update"]
-    if engine.database_dir:
-        update_args.extend(["--datadir", engine.database_dir])
-    return admin_command(update_args)
+    return direct
 
 
 def build_install_command(packages: list[str]) -> list[str]:

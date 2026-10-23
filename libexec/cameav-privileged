@@ -127,15 +127,19 @@ def cmd_update(args: list[str]) -> None:
         datadir = args[index + 1]
         if not os.path.isabs(datadir) or not os.path.isdir(datadir):
             die("Каталог баз не найден")
-    command = []
-    stdbuf = shutil.which("stdbuf")
-    if stdbuf:
-        command.extend([stdbuf, "-oL", "-eL"])
-    command.append(find_bin("freshclam"))
-    command.append("--stdout")
-    if datadir:
-        command.append(f"--datadir={datadir}")
-    exec_command(command)
+    from cameav.signatures import update_databases
+
+    raise SystemExit(update_databases(datadir))
+
+
+def cmd_clamav(_args: list[str]) -> None:
+    try:
+        prepare_runtime()
+        from cameav.runtime import install_clamav
+
+        install_clamav()
+    except Exception as exc:
+        die(f"Не удалось обновить программу ClamAV: {exc}")
 
 
 def cmd_install(args: list[str]) -> None:
@@ -230,6 +234,7 @@ def main() -> None:
     args = sys.argv[2:]
     actions = {
         "update": cmd_update,
+        "clamav": cmd_clamav,
         "install": cmd_install,
         "scan": cmd_scan,
         "quarantine": cmd_quarantine,

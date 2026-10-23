@@ -176,6 +176,8 @@ def _signature(engine: EngineInfo, options: ScanOptions) -> str:
     payload = "\n".join(
         [
             engine.database_dir or "",
+            engine.engine_version,
+            *(f"{item.name}:{item.version}" for item in engine.databases),
             str(options.archives),
             str(options.mail),
             str(options.pua),

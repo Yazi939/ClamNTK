@@ -15,8 +15,37 @@ CLAMAV_VERSION = "1.4.6"
 REPO_PACKAGES = ("python3", "python3-qt5", "python3-qt5-base", "polkit")
 
 
+def _version_tuple(text: str) -> tuple[int, ...]:
+    numbers = []
+    for piece in text.replace("/", " ").split():
+        if piece[:1].isdigit():
+            numbers = [int(part) for part in piece.split(".") if part.isdigit()]
+            break
+    return tuple(numbers[:3]) or (0,)
+
+
+def clamav_version() -> str:
+    binary = shutil.which("clamscan")
+    if not binary:
+        return ""
+    try:
+        output = subprocess.check_output(
+            [binary, "--version"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=20,
+            env={**os.environ, "LC_ALL": "C"},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    parts = output.strip().split()
+    if len(parts) >= 2:
+        return parts[1].split("/")[0]
+    return ""
+
+
 def clamav_present() -> bool:
-    if shutil.which("clamscan"):
+    if clamav_version():
         return True
     completed = subprocess.run(
         ["rpm", "-q", "clamav"],
@@ -25,6 +54,15 @@ def clamav_present() -> bool:
         env={**os.environ, "LC_ALL": "C"},
     )
     return completed.returncode == 0 and "not installed" not in completed.stdout
+
+
+def clamav_is_current() -> bool:
+    found = clamav_version()
+    return bool(found) and _version_tuple(found) >= _version_tuple(CLAMAV_VERSION)
+
+
+def version_is_older(found: str, required: str) -> bool:
+    return _version_tuple(found) < _version_tuple(required)
 
 
 def repo_has_clamav() -> bool:
@@ -168,9 +206,15 @@ def prepare_clamav_runtime() -> None:
 
 
 def install_clamav() -> None:
-    if clamav_present():
-        print("ClamNTK: ClamAV уже установлен", flush=True)
+    if clamav_is_current():
+        print(f"ClamNTK: ClamAV {clamav_version()} уже подходит", flush=True)
         return
+    found = clamav_version()
+    if found:
+        print(
+            f"ClamNTK: ClamAV {found} старше рекомендуемой {CLAMAV_VERSION}, ставлю новую сборку",
+            flush=True,
+        )
     if repo_has_clamav():
         print("ClamNTK: установка пакета clamav из репозитория РЕД ОС", flush=True)
         subprocess.check_call(["dnf", "install", "-y", "clamav"])

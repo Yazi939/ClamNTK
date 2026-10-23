@@ -123,6 +123,17 @@ def build_rpm(version: str) -> Path:
     return target
 
 
+def signature_assets() -> list[Path]:
+    base = Path("/usr/local/share/clamav")
+    assets: list[Path] = []
+    for name in ("bytecode.cvd", "daily.cvd", "main.cvd"):
+        path = base / name
+        if not path.is_file():
+            raise SystemExit(f"Нет {path}, без него другой компьютер не получит базы при лимите CDN.")
+        assets.append(path)
+    return assets
+
+
 def publish(version: str, package: Path) -> None:
     git("add", "cameav/__init__.py", "packaging/cameav.spec")
     git("commit", "-m", f"Выпуск ClamNTK {version}")
@@ -143,6 +154,7 @@ def publish(version: str, package: Path) -> None:
             "create",
             f"v{version}",
             str(package),
+            *[str(path) for path in signature_assets()],
             "--repo",
             f"{owner}/{repo}",
             "--target",
@@ -152,8 +164,8 @@ def publish(version: str, package: Path) -> None:
             "--notes",
             (
                 f"Сборка {version} для РЕД ОС.\n\n"
-                "При запуске программа сама предлагает поставить новый выпуск.\n"
-                "Проверка без баз сигнатур больше не заканчивается сразу с надписью «угроз не обнаружено»."
+                "Если сервер баз ClamAV отвечает лимитом CDN, программа берёт пакеты сигнатур из этого выпуска.\n"
+                "При запуске программа сама предлагает поставить новый выпуск."
             ),
         ],
         cwd=ROOT,
