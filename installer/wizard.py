@@ -1,4 +1,4 @@
-"""Окно мастера установки ClameNTK."""
+"""Окно мастера установки ClamNTK."""
 
 from __future__ import annotations
 
@@ -168,7 +168,7 @@ class SetupWindow(QMainWindow):
                 self.rpm_error = ""
         else:
             self.rpm_error = "Рядом с установщиком нет файла dist/cameav-*.rpm."
-        self.setWindowTitle("Установка ClameNTK")
+        self.setWindowTitle("Установка ClamNTK")
         self.resize(920, 600)
         self.setMinimumSize(860, 560)
         self._build()
@@ -211,7 +211,7 @@ class SetupWindow(QMainWindow):
         layout = QVBoxLayout(rail)
         layout.setContentsMargins(18, 22, 18, 18)
         layout.setSpacing(6)
-        brand = QLabel("ClameNTK")
+        brand = QLabel("ClamNTK")
         brand.setObjectName("railTitle")
         sub = QLabel("Установщик для РЕД ОС")
         sub.setObjectName("railSub")
@@ -236,7 +236,7 @@ class SetupWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(14)
-        title = QLabel("Установка ClameNTK")
+        title = QLabel("Установка ClamNTK")
         title.setObjectName("title")
         lead = QLabel("Антивирусная оболочка ClamAV для рабочего стола РЕД ОС.")
         lead.setObjectName("lead")
@@ -244,7 +244,7 @@ class SetupWindow(QMainWindow):
         layout.addWidget(title)
         layout.addWidget(lead)
         text = QLabel(
-            "Мастер ставит ClameNTK как обычный пакет системы. dnf сам загрузит "
+            "Мастер ставит ClamNTK как обычный пакет системы. dnf сам загрузит "
             "ClamAV, библиотеки Qt и polkit, если их ещё нет. После этого программу "
             "можно открыть из меню и удалить этой же установкой."
         )
@@ -276,11 +276,11 @@ class SetupWindow(QMainWindow):
             (self.rpm_path is not None, "Файл пакета", str(self.rpm_path or self.rpm_error)),
         ]
         if registered:
-            rows.append((True, "ClameNTK в системе", f"Установлен пакет {registered}"))
+            rows.append((True, "ClamNTK в системе", f"Установлен пакет {registered}"))
         elif files_copied_without_package():
-            rows.append((True, "ClameNTK в системе", "Файлы уже скопированы, но пакет dnf ещё не зарегистрирован"))
+            rows.append((True, "ClamNTK в системе", "Файлы уже скопированы, но пакет dnf ещё не зарегистрирован"))
         else:
-            rows.append((True, "ClameNTK в системе", "Пока не установлен"))
+            rows.append((True, "ClamNTK в системе", "Пока не установлен"))
         for ok, heading, detail in rows:
             layout.addWidget(self._check_card(ok, heading, detail))
         layout.addStretch(1)
@@ -388,7 +388,7 @@ class SetupWindow(QMainWindow):
             self.next_button.setText("Переустановить" if cameav_registered() else "Установить")
             self.next_button.setEnabled(self._can_install() and not running)
         else:
-            self.next_button.setText("Запустить ClameNTK" if self.success and self.action != "remove" else "Закрыть")
+            self.next_button.setText("Запустить ClamNTK" if self.success and self.action != "remove" else "Закрыть")
             self.next_button.setEnabled(not running)
 
     def go_back(self) -> None:
@@ -411,8 +411,8 @@ class SetupWindow(QMainWindow):
     def remove_package(self) -> None:
         answer = QMessageBox.question(
             self,
-            "Удаление ClameNTK",
-            "Удалить ClameNTK из системы? ClamAV и остальные зависимости останутся.",
+            "Удаление ClamNTK",
+            "Удалить ClamNTK из системы? ClamAV и остальные зависимости останутся.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
@@ -422,7 +422,7 @@ class SetupWindow(QMainWindow):
         try:
             command = command_for(action, self.rpm_path)
         except RuntimeError as exc:
-            QMessageBox.warning(self, "ClameNTK", str(exc))
+            QMessageBox.warning(self, "ClamNTK", str(exc))
             return
         self.action = action
         self.success = False
@@ -432,7 +432,7 @@ class SetupWindow(QMainWindow):
             self.progress_lead.setText("Подтвердите права администратора в окне РЕД ОС. Затем dnf скачает недостающие пакеты.")
         else:
             self.progress_title.setText("Удаление")
-            self.progress_lead.setText("Подтвердите права администратора. Будет удалён только ClameNTK.")
+            self.progress_lead.setText("Подтвердите права администратора. Будет удалён только ClamNTK.")
         self.progress.setRange(0, 0)
         self.progress.show()
         self.log.appendPlainText("Команда: " + " ".join(command))
@@ -460,10 +460,10 @@ class SetupWindow(QMainWindow):
         if code == 0:
             self.success = True
             if self.action == "remove":
-                self.progress_title.setText("ClameNTK удалён")
+                self.progress_title.setText("ClamNTK удалён")
                 self.progress_lead.setText("Пакет снят с системы. ClamAV не удалялся.")
             else:
-                self.progress_title.setText("ClameNTK установлен")
+                self.progress_title.setText("ClamNTK установлен")
                 self.progress_lead.setText("Пункт появится в меню приложений. Можно запустить программу сразу.")
             return
         self.success = False
@@ -507,7 +507,7 @@ class SetupWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self.worker_thread is not None:
-            QMessageBox.information(self, "ClameNTK", "Дождитесь окончания работы dnf.")
+            QMessageBox.information(self, "ClamNTK", "Дождитесь окончания работы dnf.")
             event.ignore()
             return
         event.accept()
@@ -521,7 +521,7 @@ def main() -> int:
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
-    app.setApplicationName("Установка ClameNTK")
+    app.setApplicationName("Установка ClamNTK")
     app.setStyle("Fusion")
     app.setFont(QFont("Inter", 10))
     app.setStyleSheet(STYLESHEET)

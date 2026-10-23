@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Открывает графический установщик ClameNTK для РЕД ОС."""
+"""Открывает графический установщик ClamNTK для РЕД ОС."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Главное окно ClameNTK."""
+"""Главное окно ClamNTK."""
 
 from __future__ import annotations
 
@@ -162,7 +162,7 @@ class StatusBanner(QFrame):
         self.dot.setFixedSize(14, 14)
         text = QVBoxLayout()
         text.setSpacing(4)
-        self.title = QLabel("ClameNTK")
+        self.title = QLabel("ClamNTK")
         self.title.setObjectName("bannerTitle")
         self.subtitle = QLabel("")
         self.subtitle.setObjectName("bannerSub")
@@ -223,7 +223,7 @@ class MainWindow(QMainWindow):
         self._infected = 0
         self._errors = 0
         self._manual_path = True
-        self.setWindowTitle("ClameNTK")
+        self.setWindowTitle("ClamNTK")
         self.setWindowIcon(app_icon())
         self.resize(1180, 760)
         self.setMinimumSize(1020, 680)
@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
         logo.setFixedSize(42, 42)
         names = QVBoxLayout()
         names.setSpacing(0)
-        title = QLabel("ClameNTK")
+        title = QLabel("ClamNTK")
         title.setObjectName("logoTitle")
         subtitle = QLabel("Антивирус ClamAV")
         subtitle.setObjectName("logoSub")
@@ -336,7 +336,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 4, 0, 0)
         layout.setSpacing(16)
-        kicker = QLabel("CLAMENTK")
+        kicker = QLabel("CLAMNTK")
         kicker.setObjectName("kicker")
         hero = QLabel("Состояние защиты")
         hero.setObjectName("heroTitle")
@@ -537,7 +537,7 @@ class MainWindow(QMainWindow):
         return page
 
     def _build_updates(self) -> QWidget:
-        page, layout = self._page("Обновления", "Версия ClameNTK и пакеты сигнатур ClamAV")
+        page, layout = self._page("Обновления", "Версия ClamNTK и пакеты сигнатур ClamAV")
         layout.addWidget(self._build_app_update())
         bases = QLabel("Базы сигнатур")
         bases.setObjectName("fieldLabel")
@@ -574,7 +574,7 @@ class MainWindow(QMainWindow):
         form.setSpacing(8)
         title = QLabel(edition_title())
         title.setObjectName("cardTitle")
-        self.app_version = QLabel(f"ClameNTK {__version__}")
+        self.app_version = QLabel(f"ClamNTK {__version__}")
         self.app_version.setObjectName("cardValue")
         self.app_update_status = QLabel(self._edition_hint())
         self.app_update_status.setObjectName("muted")
@@ -708,7 +708,7 @@ class MainWindow(QMainWindow):
             level, title, subtitle = (
                 "bad",
                 "Антивирус не установлен",
-                "ClameNTK поставит пакет clamav из репозитория РЕД ОС.",
+                "ClamNTK поставит пакет clamav из репозитория РЕД ОС.",
             )
         elif state == "missing_db":
             level, title, subtitle = (
@@ -803,7 +803,7 @@ class MainWindow(QMainWindow):
 
     def refresh_about(self) -> None:
         self.about_label.setText(
-            f"ClameNTK {__version__}. Базы один раз загружаются в память, обновляет их freshclam.\n"
+            f"ClamNTK {__version__}. Базы один раз загружаются в память, обновляет их freshclam.\n"
             f"Сканер: {self.engine.clamscan or 'не найден'}\n"
             f"Обновление: {self.engine.freshclam or 'не найден'}\n"
             f"Каталог баз: {self.engine.database_dir or 'не найден'}"
@@ -818,7 +818,7 @@ class MainWindow(QMainWindow):
         if state == "missing_db":
             answer = self._ask(
                 "Нет баз сигнатур",
-                "ClameNTK может сейчас загрузить пакеты сигнатур ClamAV.",
+                "ClamNTK может сейчас загрузить пакеты сигнатур ClamAV.",
                 "Обновить",
             )
             if answer:
@@ -890,7 +890,7 @@ class MainWindow(QMainWindow):
 
     def start_scan(self) -> None:
         if self.busy():
-            self._tell("ClameNTK занят", "Дождитесь окончания текущей операции.")
+            self._tell("ClamNTK занят", "Дождитесь окончания текущей операции.")
             return
         targets = self._current_targets()
         missing = [path for path in targets if not os.path.exists(path)]
@@ -1031,7 +1031,7 @@ class MainWindow(QMainWindow):
     def start_update(self, manual: bool) -> None:
         if self.busy():
             if manual:
-                self._tell("ClameNTK занят", "Дождитесь окончания текущей операции.")
+                self._tell("ClamNTK занят", "Дождитесь окончания текущей операции.")
             return
         if not self.engine.freshclam:
             if manual:
@@ -1048,7 +1048,7 @@ class MainWindow(QMainWindow):
 
     def install_packages(self, packages: list[str]) -> None:
         if self.busy():
-            self._tell("ClameNTK занят", "Дождитесь окончания текущей операции.")
+            self._tell("ClamNTK занят", "Дождитесь окончания текущей операции.")
             return
         try:
             command = build_install_command(packages)
@@ -1110,11 +1110,11 @@ class MainWindow(QMainWindow):
         if release is None or edition() != "user":
             return
         if self.busy() or self._download_thread is not None:
-            self._tell("ClameNTK занят", "Дождитесь окончания текущей операции.")
+            self._tell("ClamNTK занят", "Дождитесь окончания текущей операции.")
             return
         version = str(getattr(release, "version", ""))
         if not self._ask(
-            "Обновление ClameNTK",
+            "Обновление ClamNTK",
             f"Скачать и установить версию {version}? После установки программу нужно открыть заново.",
             "Установить",
         ):
@@ -1146,7 +1146,7 @@ class MainWindow(QMainWindow):
         try:
             command = install_command(Path(path))
         except Exception as exc:
-            self._tell("Обновление ClameNTK", str(exc))
+            self._tell("Обновление ClamNTK", str(exc))
             return
         self.show_page("updates")
         self._start_command(command, "apprelease", f"Установка {Path(path).name}…", new_session=False)
@@ -1306,14 +1306,14 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # type: ignore[override]
         if self.busy():
             if self.scan_thread is not None:
-                question = "Вы действительно хотите закрыть ClameNTK?\nЗакрыв его, вы прервёте проверку."
+                question = "Вы действительно хотите закрыть ClamNTK?\nЗакрыв его, вы прервёте проверку."
             elif self.clean_page.busy():
-                question = "Вы действительно хотите закрыть ClameNTK?\nЗакрыв его, вы прервёте очистку."
+                question = "Вы действительно хотите закрыть ClamNTK?\nЗакрыв его, вы прервёте очистку."
             elif self.command_kind == "apprelease":
-                question = "Вы действительно хотите закрыть ClameNTK?\nЗакрыв его, вы прервёте установку обновления."
+                question = "Вы действительно хотите закрыть ClamNTK?\nЗакрыв его, вы прервёте установку обновления."
             else:
-                question = "Вы действительно хотите закрыть ClameNTK?\nЗакрыв его, вы прервёте обновление баз."
-            if not self._ask("Закрыть ClameNTK", question, "Закрыть", prefer_cancel=True):
+                question = "Вы действительно хотите закрыть ClamNTK?\nЗакрыв его, вы прервёте обновление баз."
+            if not self._ask("Закрыть ClamNTK", question, "Закрыть", prefer_cancel=True):
                 event.ignore()
                 return
             self.stop_scan()
@@ -1367,10 +1367,10 @@ class MainWindow(QMainWindow):
         self.refresh_all()
         if self.command_kind == "apprelease":
             if code == 0:
-                self.update_log.appendPlainText("Новая версия ClameNTK установлена. Закройте программу и откройте её снова.")
-                self.app_update_status.setText("Пакет установлен. Закройте ClameNTK и откройте снова, чтобы запустить новую версию.")
+                self.update_log.appendPlainText("Новая версия ClamNTK установлена. Закройте программу и откройте её снова.")
+                self.app_update_status.setText("Пакет установлен. Закройте ClamNTK и откройте снова, чтобы запустить новую версию.")
             else:
-                self._tell("Обновление ClameNTK", f"dnf завершился с кодом {code}. Подробности в журнале обновления.")
+                self._tell("Обновление ClamNTK", f"dnf завершился с кодом {code}. Подробности в журнале обновления.")
         elif self.command_kind == "install":
             if code == 0 and self.engine.clamscan:
                 self.update_log.appendPlainText("Пакеты установлены.")

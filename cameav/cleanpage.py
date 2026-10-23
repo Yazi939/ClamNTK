@@ -173,7 +173,7 @@ class CleanPage(QWidget):
         self.find_button.clicked.connect(self._find_clicked)
         self.clean_button.clicked.connect(self._clean_clicked)
         self.auto_stop.clicked.connect(self.stop)
-        self.auto_box = QCheckBox("Очищать выбранное при запуске ClameNTK")
+        self.auto_box = QCheckBox("Очищать выбранное при запуске ClamNTK")
         self.auto_box.setChecked(bool(self.store.settings["auto_clean"]))
         self.auto_box.toggled.connect(self._toggle_auto)
         actions.addWidget(self.find_button)

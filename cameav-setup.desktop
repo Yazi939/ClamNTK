@@ -1,9 +1,9 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Установить ClameNTK
+Name=Установить ClamNTK
 GenericName=Установщик
-Comment=Поставить ClameNTK в РЕД ОС через dnf
+Comment=Поставить ClamNTK в РЕД ОС через dnf
 Exec=sh -c "cd \"\$(dirname \"%k\")\" && exec ./cameav-setup"
 Icon=cameav
 Terminal=false

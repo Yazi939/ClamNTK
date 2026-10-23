@@ -1,4 +1,4 @@
-"""Проверка РЕД ОС и установка ClameNTK через dnf."""
+"""Проверка РЕД ОС и установка ClamNTK через dnf."""
 
 from __future__ import annotations
 
@@ -149,7 +149,7 @@ def files_copied_without_package() -> bool:
 def command_for(action: str, rpm_path: Path | None = None) -> list[str]:
     if action == "install":
         if rpm_path is None:
-            raise RuntimeError("Не найден RPM-пакет ClameNTK.")
+            raise RuntimeError("Не найден RPM-пакет ClamNTK.")
         command = [
             "dnf",
             "install",

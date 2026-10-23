@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Запуск ClameNTK. При отсутствии PyQt5 пакеты ставятся из репозитория РЕД ОС."""
+"""Запуск ClamNTK. При отсутствии PyQt5 пакеты ставятся из репозитория РЕД ОС."""
 
 from __future__ import annotations
 

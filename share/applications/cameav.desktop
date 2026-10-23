@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=ClameNTK
+Name=ClamNTK
 GenericName=Антивирус
 GenericName[ru]=Антивирус
 Comment=Проверка файлов и обновление баз ClamAV

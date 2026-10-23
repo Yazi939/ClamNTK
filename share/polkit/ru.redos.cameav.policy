@@ -3,13 +3,13 @@
  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
  "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
 <policyconfig>
-  <vendor>ClameNTK</vendor>
+  <vendor>ClamNTK</vendor>
   <vendor_url>https://www.clamav.net/</vendor_url>
   <action id="ru.redos.cameav.admin">
-    <description>Администрирование ClameNTK</description>
-    <description xml:lang="ru">Администрирование ClameNTK</description>
-    <message>ClameNTK запрашивает права администратора, чтобы обновить базы, установить пакеты или изолировать файл</message>
-    <message xml:lang="ru">ClameNTK запрашивает права администратора, чтобы обновить базы, установить пакеты или изолировать файл</message>
+    <description>Администрирование ClamNTK</description>
+    <description xml:lang="ru">Администрирование ClamNTK</description>
+    <message>ClamNTK запрашивает права администратора, чтобы обновить базы, установить пакеты или изолировать файл</message>
+    <message xml:lang="ru">ClamNTK запрашивает права администратора, чтобы обновить базы, установить пакеты или изолировать файл</message>
     <defaults>
       <allow_any>auth_admin</allow_any>
       <allow_inactive>auth_admin</allow_inactive>

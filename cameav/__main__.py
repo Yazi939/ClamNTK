@@ -1,4 +1,4 @@
-"""Точка входа графической оболочки ClameNTK."""
+"""Точка входа графической оболочки ClamNTK."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ def main() -> int:
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
-    app.setApplicationName("ClameNTK")
-    app.setOrganizationName("ClameNTK")
+    app.setApplicationName("ClamNTK")
+    app.setOrganizationName("ClamNTK")
     app.setDesktopFileName("cameav")
     app.setStyle("Fusion")
     app.setPalette(light_palette())

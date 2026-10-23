@@ -4,7 +4,7 @@
 На другом компьютере:
 
     git clone -b dev <адрес репозитория>
-    cd ClameNTK
+    cd ClamNTK
     python3 packaging/publish.py          # поднять последнюю цифру версии
     python3 packaging/publish.py 1.2.0    # поставить номер явно
 
@@ -53,8 +53,8 @@ def write_version(version: str) -> None:
     spec = re.sub(r"^Version:\s+\S+", f"Version:        {version}", spec, count=1, flags=re.M)
     today = datetime.date.today().strftime("%a %b %d %Y")
     entry = (
-        f"* {today} ClameNTK <cameav@localhost> - {version}-1\n"
-        f"- Выпуск ClameNTK {version}\n"
+        f"* {today} ClamNTK <cameav@localhost> - {version}-1\n"
+        f"- Выпуск ClamNTK {version}\n"
     )
     spec = spec.replace("%changelog\n", "%changelog\n" + entry, 1)
     SPEC.write_text(spec, encoding="utf-8")
@@ -125,8 +125,8 @@ def build_rpm(version: str) -> Path:
 
 def publish(version: str, package: Path) -> None:
     git("add", "cameav/__init__.py", "packaging/cameav.spec")
-    git("commit", "-m", f"Выпуск ClameNTK {version}")
-    git("tag", "-a", f"v{version}", "-m", f"ClameNTK {version}")
+    git("commit", "-m", f"Выпуск ClamNTK {version}")
+    git("tag", "-a", f"v{version}", "-m", f"ClamNTK {version}")
     git("push", "origin", DEV_BRANCH)
     git("push", "origin", f"HEAD:{USER_BRANCH}")
     git("push", "origin", f"v{version}")
@@ -148,7 +148,7 @@ def publish(version: str, package: Path) -> None:
             "--target",
             USER_BRANCH,
             "--title",
-            f"ClameNTK {version}",
+            f"ClamNTK {version}",
             "--notes",
             f"Пользовательская сборка {version} для установки на РЕД ОС.",
         ],
@@ -157,7 +157,7 @@ def publish(version: str, package: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Собрать и опубликовать пользовательский выпуск ClameNTK")
+    parser = argparse.ArgumentParser(description="Собрать и опубликовать пользовательский выпуск ClamNTK")
     parser.add_argument("version", nargs="?", help="Номер версии, например 1.2.0")
     parser.add_argument("--build-only", action="store_true", help="Только собрать RPM, без GitHub")
     args = parser.parse_args()

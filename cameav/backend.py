@@ -416,7 +416,7 @@ def admin_command(args: list[str]) -> list[str]:
     helper = helper_path()
     if helper is None:
         raise RuntimeError(
-            "Не найден служебный компонент ClameNTK. Установите программу скриптом install.py."
+            "Не найден служебный компонент ClamNTK. Установите программу скриптом install.py."
         )
     if os.geteuid() == 0:
         return [str(helper), *args]

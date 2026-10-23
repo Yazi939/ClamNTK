@@ -5,7 +5,7 @@ Summary:        Графическая оболочка ClamAV для РЕД О�
 License:        MIT
 URL:            https://www.clamav.net/
 Group:          Applications/System
-Vendor:         ClameNTK
+Vendor:         ClamNTK
 BuildArch:      noarch
 
 Requires:       python3 >= 3.9
@@ -18,7 +18,7 @@ Requires:       polkit
 %{!?cameav_root:%{error:Pass --define "cameav_root /path/to/ClameAV"}}
 
 %description
-ClameNTK — настольная графическая оболочка ClamAV для РЕД ОС.
+ClamNTK — настольная графическая оболочка ClamAV для РЕД ОС.
 Пакет ставит программу в меню и подтягивает ClamAV и библиотеки Qt.
 Базы сигнатур загружаются из окна программы.
 
@@ -52,5 +52,5 @@ gtk-update-icon-cache -f -t /usr/share/icons/hicolor &> /dev/null || :
 /usr/share/icons/hicolor/scalable/apps/cameav.svg
 
 %changelog
-* Fri Oct 23 2026 ClameNTK <cameav@localhost> - 1.0.0-1
+* Fri Oct 23 2026 ClamNTK <cameav@localhost> - 1.0.0-1
 - Desktop GUI for ClamAV on RED OS

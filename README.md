@@ -1,6 +1,6 @@
-# ClameNTK
+# ClamNTK
 
-ClameNTK — настольная программа для проверки файлов на РЕД ОС. Она ставит графическое окно поверх ClamAV и сама подтягивает нужные пакеты.
+ClamNTK — настольная программа для проверки файлов на РЕД ОС. Она ставит графическое окно поверх ClamAV и сама подтягивает нужные пакеты.
 
 Проверено на РЕД ОС 7 и 8 с графическим сеансом.
 
@@ -9,8 +9,8 @@ ClameNTK — настольная программа для проверки ф�
 Откройте страницу проекта и нажмите **Code → Download ZIP**, либо выполните в терминале:
 
 ```sh
-git clone https://github.com/Yazi939/ClameNTK.git
-cd ClameNTK
+git clone https://github.com/Yazi939/ClamNTK.git
+cd ClamNTK
 ```
 
 Если скачали ZIP, распакуйте его и откройте терминал в этой папке.
@@ -32,7 +32,7 @@ sudo update-desktop-database /usr/share/applications || true
 sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor || true
 ```
 
-После этого откройте меню **Администрирование** и запустите **ClameNTK**. В окне **Обновления** нажмите **Обновить базы**: без пакетов сигнатур проверка не начнётся. Для загрузки баз нужен интернет.
+После этого откройте меню **Администрирование** и запустите **ClamNTK**. В окне **Обновления** нажмите **Обновить базы**: без пакетов сигнатур проверка не начнётся. Для загрузки баз нужен интернет.
 
 Запустить программу из папки, не ставя её в меню, можно так:
 
@@ -43,7 +43,7 @@ sudo dnf install -y python3 python3-qt5 python3-qt5-base clamav polkit
 
 ## Поставить готовый пакет
 
-Если в [выпусках](https://github.com/Yazi939/ClameNTK/releases) есть файл `cameav-….rpm`, достаточно одной команды. `dnf` сам поставит ClamAV, Qt и polkit.
+Если в [выпусках](https://github.com/Yazi939/ClamNTK/releases) есть файл `cameav-….rpm`, достаточно одной команды. `dnf` сам поставит ClamAV, Qt и polkit.
 
 ```sh
 sudo dnf install -y ./cameav-*.rpm

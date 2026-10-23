@@ -1,4 +1,4 @@
-"""Проверка выпуска ClameNTK на GitHub.
+"""Проверка выпуска ClamNTK на GitHub.
 
 Пользовательская версия стоит из RPM и обновляется выпуском ветки main.
 Рабочая копия — это клон ветки dev: с неё готовят и публикуют следующий выпуск.
@@ -18,7 +18,7 @@ from pathlib import Path
 
 USER_BRANCH = "main"
 DEV_BRANCH = "dev"
-USER_AGENT = "ClameNTK"
+USER_AGENT = "ClamNTK"
 _CHANNEL = Path(__file__).resolve().parent / "channel.json"
 
 
@@ -137,7 +137,7 @@ def _request(url: str) -> bytes:
             return response.read()
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
-            raise UpdateError("Выпуск ClameNTK на GitHub ещё не опубликован.") from exc
+            raise UpdateError("Выпуск ClamNTK на GitHub ещё не опубликован.") from exc
         raise UpdateError(f"GitHub ответил ошибкой {exc.code}.") from exc
     except urllib.error.URLError as exc:
         raise UpdateError("Не удалось связаться с GitHub.") from exc

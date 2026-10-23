@@ -1,4 +1,4 @@
-"""Оформление ClameNTK."""
+"""Оформление ClamNTK."""
 
 from __future__ import annotations
 
