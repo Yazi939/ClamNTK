@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Служебные действия ClameNTK от имени администратора.
+
+Вызывается через pkexec. Принимает только заранее известные команды:
+обновление баз, установка пакетов ClamAV и работа с карантином.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+from pathlib import Path
+
+ALLOWED_PACKAGES = {
+    "clamav",
+    "clamav-update",
+    "clamav-data",
+    "clamav-filesystem",
+    "clamav-lib",
+    "clamd",
+    "python3",
+    "python3-qt5",
+    "python3-qt5-base",
+    "polkit",
+}
+SCAN_PREFIXES = (
+    "--stdout",
+    "--recursive=",
+    "--scan-archive=",
+    "--scan-mail=",
+    "--detect-pua=",
+    "--max-filesize=",
+    "--max-scansize=",
+    "--exclude-dir=",
+)
+PROTECTED_PREFIXES = (
+    "/bin/",
+    "/sbin/",
+    "/lib/",
+    "/lib64/",
+    "/usr/bin/",
+    "/usr/sbin/",
+    "/usr/lib/",
+    "/usr/lib64/",
+    "/boot/",
+    "/etc/",
+    "/proc/",
+    "/sys/",
+    "/dev/",
+)
+
+
+def die(message: str, code: int = 1) -> None:
+    print(message, file=sys.stderr)
+    raise SystemExit(code)
+
+
+def find_bin(name: str) -> str:
+    for prefix in ("/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin"):
+        candidate = Path(prefix) / name
+        if os.access(candidate, os.X_OK):
+            return str(candidate)
+    found = shutil.which(name)
+    if not found:
+        die(f"Не найдена программа {name}")
+    return found
+
+
+def exec_command(argv: list[str]) -> None:
+    os.environ["LC_ALL"] = "C"
+    os.environ["LANG"] = "C"
+    os.execvp(argv[0], argv)
+
+
+def is_protected(path: Path) -> bool:
+    resolved = str(path.resolve())
+    for prefix in PROTECTED_PREFIXES:
+        if resolved == prefix.rstrip("/") or resolved.startswith(prefix):
+            return True
+    return False
+
+
+def regular_file(path_text: str) -> Path:
+    path = Path(path_text)
+    if not path.is_absolute():
+        die(f"Нужен абсолютный путь: {path_text}")
+    if not path.exists():
+        die(f"Файл не найден: {path_text}")
+    if path.is_symlink() or not path.is_file():
+        die(f"Ожидался обычный файл: {path_text}")
+    if is_protected(path):
+        die(f"Системный файл изменять нельзя: {path_text}")
+    return path
+
+
+def quarantine_parent(path: Path) -> Path:
+    parent = path.parent.resolve()
+    if parent.name != "quarantine" or parent.parent.name != "cameav":
+        die("Некорректный каталог карантина")
+    return parent
+
+
+def cmd_update(args: list[str]) -> None:
+    datadir = None
+    if "--datadir" in args:
+        index = args.index("--datadir")
+        if index + 1 >= len(args):
+            die("Не указан каталог баз")
+        datadir = args[index + 1]
+        if not os.path.isabs(datadir) or not os.path.isdir(datadir):
+            die("Каталог баз не найден")
+    command = []
+    stdbuf = shutil.which("stdbuf")
+    if stdbuf:
+        command.extend([stdbuf, "-oL", "-eL"])
+    command.append(find_bin("freshclam"))
+    command.append("--stdout")
+    if datadir:
+        command.append(f"--datadir={datadir}")
+    exec_command(command)
+
+
+def cmd_install(args: list[str]) -> None:
+    if not args:
+        die("Не указаны пакеты")
+    for package in args:
+        if package not in ALLOWED_PACKAGES:
+            die(f"Пакет не разрешён: {package}")
+    exec_command([find_bin("dnf"), "install", "-y", *args])
+
+
+def cmd_scan(args: list[str]) -> None:
+    if "--" not in args:
+        die("Некорректная команда проверки")
+    split = args.index("--")
+    flags = args[:split]
+    targets = args[split + 1 :]
+    if not targets:
+        die("Не указан путь проверки")
+    for flag in flags:
+        if not flag.startswith(SCAN_PREFIXES):
+            die(f"Флаг не разрешён: {flag}")
+    for target in targets:
+        if not os.path.isabs(target):
+            die("Путь проверки должен быть абсолютным")
+    command = []
+    stdbuf = shutil.which("stdbuf")
+    if stdbuf:
+        command.extend([stdbuf, "-oL", "-eL"])
+    command.append(find_bin("clamscan"))
+    command.extend(flags)
+    command.extend(targets)
+    exec_command(command)
+
+
+def pairs(args: list[str]) -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    index = 0
+    while index < len(args):
+        if args[index] != "--src" or index + 3 >= len(args) or args[index + 2] != "--dst":
+            die("Ожидались пары --src и --dst")
+        found.append((args[index + 1], args[index + 3]))
+        index += 4
+    if not found:
+        die("Не указаны файлы")
+    return found
+
+
+def cmd_quarantine(args: list[str]) -> None:
+    for source_text, dest_text in pairs(args):
+        source = regular_file(source_text)
+        destination = Path(dest_text)
+        if not destination.is_absolute():
+            die("Путь карантина должен быть абсолютным")
+        parent = quarantine_parent(destination)
+        parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        os.chmod(destination, 0o600)
+        print(f"MOVED\t{source}\t{destination}", flush=True)
+
+
+def cmd_restore(args: list[str]) -> None:
+    for source_text, dest_text in pairs(args):
+        source = regular_file(source_text)
+        quarantine_parent(source)
+        destination = Path(dest_text)
+        if not destination.is_absolute():
+            die("Путь восстановления должен быть абсолютным")
+        if destination.exists():
+            die(f"Файл уже существует: {destination}")
+        if is_protected(destination):
+            die(f"Восстановление в системный каталог запрещено: {destination}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        print(f"RESTORED\t{source}\t{destination}", flush=True)
+
+
+def cmd_delete(args: list[str]) -> None:
+    if len(args) != 2 or args[0] != "--path":
+        die("Ожидалось: delete --path ФАЙЛ")
+    path = regular_file(args[1])
+    path.unlink()
+    print(f"DELETED\t{path}", flush=True)
+
+
+def main() -> None:
+    if os.geteuid() != 0:
+        die("Нужны права администратора")
+    if len(sys.argv) < 2:
+        die("Не указана команда")
+    command = sys.argv[1]
+    args = sys.argv[2:]
+    actions = {
+        "update": cmd_update,
+        "install": cmd_install,
+        "scan": cmd_scan,
+        "quarantine": cmd_quarantine,
+        "restore": cmd_restore,
+        "delete": cmd_delete,
+    }
+    action = actions.get(command)
+    if action is None:
+        die(f"Неизвестная команда: {command}")
+    action(args)
+
+
+if __name__ == "__main__":
+    main()

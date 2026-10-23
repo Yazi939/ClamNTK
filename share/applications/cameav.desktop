@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ClameNTK
+GenericName=Антивирус
+GenericName[ru]=Антивирус
+Comment=Проверка файлов и обновление баз ClamAV
+Comment[ru]=Проверка файлов и обновление баз ClamAV
+Exec=cameav %F
+Icon=cameav
+Terminal=false
+Categories=System;Settings;Security;
+Keywords=antivirus;clamav;virus;security;антивирус;
+StartupNotify=true

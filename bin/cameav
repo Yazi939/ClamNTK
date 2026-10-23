@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Запуск ClameNTK. При отсутствии PyQt5 пакеты ставятся из репозитория РЕД ОС."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+
+
+def package_root() -> str:
+    here = os.path.dirname(os.path.realpath(__file__))
+    local = os.path.abspath(os.path.join(here, ".."))
+    local_main = os.path.join(local, "cameav", "__main__.py")
+    system_main = "/usr/share/cameav/cameav/__main__.py"
+    if os.path.basename(here) == "bin" and os.path.isfile(local_main):
+        return local
+    if os.path.isfile(system_main):
+        return "/usr/share/cameav"
+    if os.path.isfile(local_main):
+        return local
+    sys.stderr.write("Не найдены файлы CameAV. Запустите install.py.\n")
+    raise SystemExit(1)
+
+
+def ensure_pyqt() -> None:
+    try:
+        import PyQt5  # noqa: F401
+        return
+    except Exception:
+        pass
+    packages = ["python3-qt5", "python3-qt5-base"]
+    command = ["dnf", "install", "-y", *packages]
+    if os.geteuid() != 0:
+        if not shutil.which("pkexec"):
+            sys.stderr.write("Установите пакет python3-qt5: dnf install python3-qt5\n")
+            raise SystemExit(1)
+        command.insert(0, "pkexec")
+    sys.stderr.write("CameAV устанавливает пакеты: %s\n" % " ".join(packages))
+    subprocess.check_call(command)
+    os.execv(sys.executable, [sys.executable, *sys.argv])
+
+
+if __name__ == "__main__":
+    ensure_pyqt()
+    sys.path.insert(0, package_root())
+    from cameav.__main__ import main
+
+    raise SystemExit(main())
