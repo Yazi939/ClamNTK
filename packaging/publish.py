@@ -77,7 +77,7 @@ def ensure_dev_branch() -> None:
 def build_rpm(version: str) -> Path:
     if shutil.which("rpmbuild") is None:
         raise SystemExit("Не найден rpmbuild. Установите пакет rpm-build.")
-    top = ROOT / "build" / "rpm"
+    top = Path(f"/tmp/cameav-rpm-{os.getuid()}")
     for name in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
         (top / name).mkdir(parents=True, exist_ok=True)
     dist = subprocess.run(["rpm", "--eval", "%{dist}"], text=True, capture_output=True, check=False)
