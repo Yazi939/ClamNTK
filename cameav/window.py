@@ -900,6 +900,14 @@ class MainWindow(QMainWindow):
         if not self.engine.clamscan:
             self._tell("Проверка не запущена", "Не найден clamscan. Установите пакет clamav.")
             return
+        if database_state(self.engine) in {"missing_engine", "missing_db"} or not self.engine.database_dir:
+            if self._ask(
+                "Нет баз сигнатур",
+                "Без пакетов сигнатур проверка сразу заканчивается и файлы не смотрит. Загрузить базы сейчас?",
+                "Обновить",
+            ):
+                self.start_update(manual=True)
+            return
         options = self._scan_options()
         self.scan_targets = targets
         self.scan_started = datetime.now().astimezone()
@@ -1089,6 +1097,8 @@ class MainWindow(QMainWindow):
                     f"Доступна версия {version}. Сейчас установлена {__version__}."
                 )
                 self.install_app_button.setEnabled(True)
+                if not self._release_manual:
+                    self._install_app_release()
             else:
                 self.app_update_status.setText(
                     f"На GitHub опубликован выпуск {version}. "

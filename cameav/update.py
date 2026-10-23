@@ -19,6 +19,8 @@ from pathlib import Path
 USER_BRANCH = "main"
 DEV_BRANCH = "dev"
 USER_AGENT = "ClamNTK"
+# Тот же адрес, что в инструкции по установке. Без него уже поставленная копия не видит выпуски.
+DEFAULT_COORDINATES = ("Yazi939", "ClamNTK")
 _CHANNEL = Path(__file__).resolve().parent / "channel.json"
 
 
@@ -50,21 +52,20 @@ def edition_title() -> str:
 
 
 def github_coordinates() -> tuple[str, str] | None:
-    """Адрес репозитория берётся из git или из файла поставки, не из исходников."""
+    """Адрес репозитория: git, файл поставки или страница проекта."""
     remote = _coordinates_from_git()
     if remote is not None:
         return remote
-    if not _CHANNEL.is_file():
-        return None
-    try:
-        data = json.loads(_CHANNEL.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    owner = str(data.get("owner") or "").strip()
-    repo = str(data.get("repo") or "").strip()
-    if owner and repo:
-        return owner, repo
-    return None
+    if _CHANNEL.is_file():
+        try:
+            data = json.loads(_CHANNEL.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        owner = str(data.get("owner") or "").strip()
+        repo = str(data.get("repo") or "").strip()
+        if owner and repo:
+            return owner, repo
+    return DEFAULT_COORDINATES
 
 
 def _coordinates_from_readme() -> tuple[str, str] | None:

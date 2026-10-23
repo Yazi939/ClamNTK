@@ -143,9 +143,13 @@ class ScanWorker(QObject):
             return
         assert self.proc.stdout is not None
         since_emit = 0
+        noticed: list[str] = []
         for raw in self.proc.stdout:
             if self._stop:
                 break
+            stripped = raw.strip()
+            if stripped.startswith("ERROR:") or "No supported database" in stripped or "cli_loaddbdir" in stripped:
+                noticed.append(stripped)
             kind = consume_scan_line(state, raw)
             if kind == "threat":
                 threat = state.threats[-1]
@@ -172,6 +176,9 @@ class ScanWorker(QObject):
             self.file_seen.emit(state.current_file)
         scanned, infected, errors = final_counts(state)
         self.stats.emit(scanned, infected, errors)
+        if not self._stop and code not in (0, 1):
+            self.failed.emit(_scan_failure_text(noticed, code))
+            return
         result = self._empty_result(cancelled=self._stop)
         result.update(
             {
@@ -220,6 +227,16 @@ class ScanWorker(QObject):
         except RuntimeError as exc:
             self.failed.emit(str(exc))
             return None
+
+
+def _scan_failure_text(lines: list[str], code: int) -> str:
+    blob = "\n".join(lines)
+    if "No supported database" in blob or "cli_loaddbdir" in blob:
+        return "Нет баз сигнатур. Откройте «Обновления» и нажмите «Обновить базы», иначе проверка файлы не смотрит."
+    for line in reversed(lines):
+        if line.startswith("ERROR:"):
+            return "Проверка не выполнена.\n" + line
+    return f"Проверка завершилась с кодом {code} и не просмотрела файлы."
 
 
 class CountWorker(QObject):
