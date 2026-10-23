@@ -101,7 +101,24 @@ def quarantine_parent(path: Path) -> Path:
     return parent
 
 
+def prepare_runtime() -> None:
+    candidates = (
+        Path("/usr/share/cameav"),
+        Path(__file__).resolve().parents[1],
+    )
+    for entry in candidates:
+        if (entry / "cameav" / "runtime.py").is_file() and str(entry) not in sys.path:
+            sys.path.insert(0, str(entry))
+    from cameav.runtime import prepare_clamav_runtime
+
+    prepare_clamav_runtime()
+
+
 def cmd_update(args: list[str]) -> None:
+    try:
+        prepare_runtime()
+    except Exception as exc:
+        die(f"Не удалось подготовить каталог баз ClamAV: {exc}")
     datadir = None
     if "--datadir" in args:
         index = args.index("--datadir")

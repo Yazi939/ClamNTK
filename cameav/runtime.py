@@ -71,20 +71,100 @@ def _download(url: str, dest: Path) -> None:
                     print(f"ClamNTK: загружено {done // (1024 * 1024)} МиБ", flush=True)
 
 
-def _prepare_configs() -> None:
+DATABASE_DIR = Path("/usr/local/share/clamav")
+
+
+def _disable_example(text: str) -> str:
+    lines = ["#Example\n" if line.strip() == "Example" else line for line in text.splitlines(True)]
+    return "".join(lines)
+
+
+def _has_directive(text: str, key: str) -> bool:
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.split(None, 1)[0] == key:
+            return True
+    return False
+
+
+def _ensure_directive(text: str, key: str, value: str) -> str:
+    if _has_directive(text, key):
+        return text
+    if text and not text.endswith("\n"):
+        text += "\n"
+    return text + f"{key} {value}\n"
+
+
+def _account_exists(kind: str, name: str) -> bool:
+    database = "group" if kind == "group" else "passwd"
+    completed = subprocess.run(["getent", database, name], capture_output=True)
+    return completed.returncode == 0
+
+
+def _nologin() -> str:
+    for candidate in ("/sbin/nologin", "/usr/sbin/nologin", "/bin/false"):
+        if Path(candidate).is_file():
+            return candidate
+    return "/bin/false"
+
+
+def _ensure_clamav_account() -> None:
+    if not _account_exists("group", "clamav"):
+        subprocess.check_call(["groupadd", "--system", "clamav"])
+    if not _account_exists("user", "clamav"):
+        subprocess.check_call(
+            [
+                "useradd",
+                "--system",
+                "--gid",
+                "clamav",
+                "--no-create-home",
+                "--shell",
+                _nologin(),
+                "--comment",
+                "ClamAV",
+                "clamav",
+            ]
+        )
+
+
+def _give_database(directory: Path) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    shutil.chown(directory, user="clamav", group="clamav")
+    directory.chmod(0o755)
+    for child in directory.rglob("*"):
+        shutil.chown(child, user="clamav", group="clamav")
+
+
+def prepare_clamav_runtime() -> None:
+    """Убрать Example, завести пользователя clamav и отдать ему каталог баз.
+
+    Без этого freshclam от root завершается с кодом 2.
+    """
+    _ensure_clamav_account()
     etc = Path("/usr/local/etc")
+    etc.mkdir(parents=True, exist_ok=True)
     for name in ("freshclam.conf", "clamd.conf"):
         config = etc / name
         sample = etc / f"{name}.sample"
-        if config.is_file() or not sample.is_file():
+        if not config.is_file() and sample.is_file():
+            config.write_text(sample.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+        if not config.is_file():
             continue
-        lines: list[str] = []
-        for line in sample.read_text(encoding="utf-8", errors="replace").splitlines(True):
-            lines.append("#Example\n" if line.strip() == "Example" else line)
-        config.write_text("".join(lines), encoding="utf-8")
-        print(f"ClamNTK: подготовлен {config}", flush=True)
-    for directory in (Path("/usr/local/share/clamav"), Path("/var/lib/clamav")):
-        directory.mkdir(parents=True, exist_ok=True)
+        original = config.read_text(encoding="utf-8", errors="replace")
+        text = _disable_example(original)
+        if name == "freshclam.conf":
+            text = _ensure_directive(text, "DatabaseOwner", "clamav")
+            text = _ensure_directive(text, "DatabaseDirectory", str(DATABASE_DIR))
+            text = _ensure_directive(text, "DatabaseMirror", "database.clamav.net")
+        elif name == "clamd.conf":
+            text = _ensure_directive(text, "DatabaseDirectory", str(DATABASE_DIR))
+        if text != original:
+            config.write_text(text, encoding="utf-8")
+            print(f"ClamNTK: подготовлен {config}", flush=True)
+    _give_database(DATABASE_DIR)
 
 
 def install_clamav() -> None:
@@ -105,7 +185,6 @@ def install_clamav() -> None:
         subprocess.check_call(
             ["dnf", "install", "-y", "--setopt=localpkg_gpgcheck=0", str(dest)]
         )
-    _prepare_configs()
     if not clamav_present():
         raise RuntimeError("ClamAV установлен, но команда clamscan не найдена.")
 
@@ -114,6 +193,7 @@ def install_missing() -> None:
     print("ClamNTK: установка библиотек интерфейса", flush=True)
     subprocess.check_call(["dnf", "install", "-y", *REPO_PACKAGES])
     install_clamav()
+    prepare_clamav_runtime()
 
 
 if __name__ == "__main__":

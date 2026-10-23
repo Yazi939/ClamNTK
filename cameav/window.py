@@ -1379,10 +1379,21 @@ class MainWindow(QMainWindow):
             elif code != 0:
                 self._tell("Установка", f"dnf завершился с кодом {code}. Подробности в журнале обновления.")
         elif code not in (0, 1):
-            self._tell("Обновление баз", f"freshclam завершился с кодом {code}.")
+            hint = self._freshclam_hint()
+            text = f"freshclam завершился с кодом {code}."
+            if hint:
+                text = text + "\n" + hint
+            self._tell("Обновление баз", text)
         elif code == 0:
             self.update_log.appendPlainText("Базы сигнатур обновлены.")
             QTimer.singleShot(400, self._warm_daemon)
+
+    def _freshclam_hint(self) -> str:
+        lines = [line.strip() for line in self.update_log.toPlainText().splitlines() if line.strip()]
+        errors = [line for line in lines if line.startswith("ERROR:") or "Initialization" in line]
+        if errors:
+            return errors[-1]
+        return ""
 
     def _on_command_failed(self, message: str) -> None:
         self.update_log.appendPlainText(message)
