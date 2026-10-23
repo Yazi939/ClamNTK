@@ -29,9 +29,12 @@ from installer.engine import (
     command_for,
     files_copied_without_package,
     find_rpm,
+    folder_plan,
+    installed_nevra,
     package_plan,
     query_rpm_file,
     redos_ok,
+    source_tree_ready,
     system_summary,
     tool_exists,
 )
@@ -162,12 +165,20 @@ class SetupWindow(QMainWindow):
                 self.plan = package_plan(self.rpm_path)
             except (OSError, subprocess.SubprocessError) as exc:
                 self.rpm_info = None
-                self.plan = []
-                self.rpm_error = str(exc)
+                self.rpm_path = None
+                if source_tree_ready():
+                    self.plan = folder_plan()
+                    self.rpm_error = ""
+                else:
+                    self.plan = []
+                    self.rpm_error = str(exc)
             else:
                 self.rpm_error = ""
+        elif source_tree_ready():
+            self.plan = folder_plan()
+            self.rpm_error = ""
         else:
-            self.rpm_error = "Рядом с установщиком нет файла dist/cameav-*.rpm."
+            self.rpm_error = "Рядом с установщиком нет файлов оболочки ClamNTK."
         self.setWindowTitle("Установка ClamNTK")
         self.resize(920, 600)
         self.setMinimumSize(860, 560)
@@ -244,15 +255,20 @@ class SetupWindow(QMainWindow):
         layout.addWidget(title)
         layout.addWidget(lead)
         text = QLabel(
-            "Мастер ставит ClamNTK как обычный пакет системы. dnf сам загрузит "
-            "ClamAV, библиотеки Qt и polkit, если их ещё нет. После этого программу "
-            "можно открыть из меню и удалить этой же установкой."
+            "Если на компьютере нет ClamAV, мастер сначала сам поставит его из репозитория "
+            "РЕД ОС вместе с Qt и polkit. Оболочка ставится только после этого и появляется "
+            "в меню «Администрирование»."
         )
         text.setWordWrap(True)
         text.setObjectName("body")
         layout.addWidget(text)
-        version = self.rpm_info["label"] if self.rpm_info else "пакет не найден"
-        layout.addWidget(banner("ok" if self.rpm_info else "bad", f"Локальный пакет: {version}"))
+        if self.rpm_info:
+            note = ("ok", f"Локальный пакет: {self.rpm_info['label']}. Зависимости dnf поставит до него.")
+        elif source_tree_ready():
+            note = ("ok", "Файла RPM нет. ClamAV и зависимости будут загружены до установки оболочки.")
+        else:
+            note = ("bad", self.rpm_error)
+        layout.addWidget(banner(*note))
         layout.addStretch(1)
         return page
 
@@ -273,7 +289,8 @@ class SetupWindow(QMainWindow):
                 "Права администратора",
                 "Подтверждение через polkit" if tool_exists("pkexec") else "Нет pkexec",
             ),
-            (self.rpm_path is not None, "Файл пакета", str(self.rpm_path or self.rpm_error)),
+            self._shell_row(),
+            self._clamav_row(),
         ]
         if registered:
             rows.append((True, "ClamNTK в системе", f"Установлен пакет {registered}"))
@@ -294,7 +311,8 @@ class SetupWindow(QMainWindow):
         title = QLabel("Состав установки")
         title.setObjectName("title")
         hint = QLabel(
-            "Уже стоящие пакеты dnf не скачивает заново. Недостающие будут взяты из репозитория РЕД ОС, для этого нужен доступ в сеть."
+            "Сначала ставятся ClamAV и остальные зависимости. Оболочка — последней. "
+            "Уже стоящие пакеты dnf не скачивает заново. Для загрузки нужен интернет."
         )
         hint.setWordWrap(True)
         hint.setObjectName("lead")
@@ -420,7 +438,7 @@ class SetupWindow(QMainWindow):
 
     def start_transaction(self, action: str) -> None:
         try:
-            command = command_for(action, self.rpm_path)
+            command = command_for(action, self.rpm_path if self.rpm_info else None)
         except RuntimeError as exc:
             QMessageBox.warning(self, "ClamNTK", str(exc))
             return
@@ -429,7 +447,9 @@ class SetupWindow(QMainWindow):
         self.log.clear()
         if action == "install":
             self.progress_title.setText("Установка")
-            self.progress_lead.setText("Подтвердите права администратора в окне РЕД ОС. Затем dnf скачает недостающие пакеты.")
+            self.progress_lead.setText(
+                "Подтвердите права администратора. Сначала будет установлен ClamAV и остальные зависимости, затем оболочка."
+            )
         else:
             self.progress_title.setText("Удаление")
             self.progress_lead.setText("Подтвердите права администратора. Будет удалён только ClamNTK.")
@@ -478,8 +498,22 @@ class SetupWindow(QMainWindow):
         self.worker_thread = None
         self.show_step(3)
 
+    def _shell_row(self) -> tuple[bool, str, str]:
+        if self.rpm_path is not None and not self.rpm_error:
+            return True, "Оболочка", f"Пакет {self.rpm_path.name}, после зависимостей"
+        if source_tree_ready():
+            return True, "Оболочка", "Будет поставлена из этой папки после ClamAV"
+        return False, "Оболочка", self.rpm_error
+
+    def _clamav_row(self) -> tuple[bool, str, str]:
+        current = installed_nevra("clamav")
+        if current:
+            return True, "ClamAV", f"Уже установлен: {current}"
+        return True, "ClamAV", "Нет в системе. Установщик скачает его до оболочки."
+
     def _can_install(self) -> bool:
-        return self.supported and self.rpm_path is not None and tool_exists("dnf") and (
+        ready = (self.rpm_path is not None and not self.rpm_error) or source_tree_ready()
+        return self.supported and ready and tool_exists("dnf") and (
             tool_exists("pkexec") or os.geteuid() == 0
         )
 

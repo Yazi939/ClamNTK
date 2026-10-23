@@ -1,58 +1,57 @@
 # ClamNTK
 
-ClamNTK — настольная программа для проверки файлов на РЕД ОС. Она ставит графическое окно поверх ClamAV и сама подтягивает нужные пакеты.
+ClamNTK — настольная программа для проверки файлов на РЕД ОС. Это графическое окно поверх ClamAV: проверка, базы сигнатур и очистка. Если ClamAV на компьютере нет, установщик скачивает его сам, до того как поставит оболочку.
 
-Проверено на РЕД ОС 7 и 8 с графическим сеансом.
+Проверено на РЕД ОС 7 и 8 с графическим сеансом. Для загрузки пакетов и баз нужен интернет.
 
 ## Скачать
 
-Откройте страницу проекта и нажмите **Code → Download ZIP**, либо выполните в терминале:
+На странице проекта нажмите **Code → Download ZIP**, распакуйте архив и откройте получившуюся папку.
+
+Либо в терминале:
 
 ```sh
 git clone https://github.com/Yazi939/ClamNTK.git
 cd ClamNTK
 ```
 
-Если скачали ZIP, распакуйте его и откройте терминал в этой папке.
+## Установить
 
-## Поставить в меню
-
-Эти команды ставят программу так, чтобы она появилась в разделе **Администрирование**.
+В папке запустите мастер:
 
 ```sh
-sudo dnf install -y python3 python3-qt5 python3-qt5-base clamav polkit
-sudo mkdir -p /usr/share/cameav /usr/share/icons
-sudo cp -a cameav /usr/share/cameav/cameav
-sudo install -D -m 755 bin/cameav /usr/bin/cameav
-sudo install -D -m 755 libexec/cameav-privileged /usr/libexec/cameav-privileged
-sudo install -D -m 644 share/applications/cameav.desktop /usr/share/applications/cameav.desktop
-sudo install -D -m 644 share/polkit/ru.redos.cameav.policy /usr/share/polkit-1/actions/ru.redos.cameav.policy
-sudo cp -a share/icons/hicolor /usr/share/icons/
-sudo update-desktop-database /usr/share/applications || true
-sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor || true
+./Установить\ ClamNTK.sh
 ```
 
-После этого откройте меню **Администрирование** и запустите **ClamNTK**. В окне **Обновления** нажмите **Обновить базы**: без пакетов сигнатур проверка не начнётся. Для загрузки баз нужен интернет.
+Тот же мастер открывается двойным щелчком по этому файлу или командой `./cameav-setup`.
 
-Запустить программу из папки, не ставя её в меню, можно так:
+Дальше четыре шага.
+
+1. **Приветствие.** Нажмите **Далее**.
+2. **Система.** Мастер проверяет, что это РЕД ОС и что есть `dnf`. Строка ClamAV показывает, установлен он уже или будет скачан.
+3. **Пакеты.** Сначала в списке ClamAV, Qt и polkit, последней строкой — оболочка. Нажмите **Установить** и подтвердите права администратора.
+4. **Установка.** Программа сама выполняет `dnf`: недостающие пакеты ставятся первыми, оболочка — только после них. Пункт **ClamNTK** появляется в меню **Администрирование**.
+
+При первом запуске откройте **Обновления** и нажмите **Обновить базы**. Без пакетов сигнатур проверка не начнётся.
+
+Запустить программу из папки, не ставя её в меню, можно так. Если `clamscan` не найден, ClamAV будет установлен до открытия окна:
 
 ```sh
-sudo dnf install -y python3 python3-qt5 python3-qt5-base clamav polkit
 ./bin/cameav
 ```
 
-## Поставить готовый пакет
+## Готовый пакет
 
-Если в [выпусках](https://github.com/Yazi939/ClamNTK/releases) есть файл `cameav-….rpm`, достаточно одной команды. `dnf` сам поставит ClamAV, Qt и polkit.
+Если в [выпусках](https://github.com/Yazi939/ClamNTK/releases) есть файл `cameav-….rpm`, его ставит `dnf`. ClamAV и остальные зависимости ставятся до оболочки.
 
 ```sh
 sudo dnf install -y ./cameav-*.rpm
 ```
 
-Удаляется пакет так:
+Снять такую установку:
 
 ```sh
 sudo dnf remove -y cameav
 ```
 
-ClamAV при этом остаётся в системе.
+Удаляется только оболочка. ClamAV в системе остаётся.

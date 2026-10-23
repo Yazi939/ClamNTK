@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import os
 import platform
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# ClamAV идёт первым: оболочка ставится только после него.
+RUNTIME_PACKAGES = ("clamav", "python3", "python3-qt5", "python3-qt5-base", "polkit")
 
 
 def read_os_release() -> dict[str, str]:
@@ -43,6 +46,10 @@ def redos_ok(info: dict[str, str] | None = None) -> tuple[bool, str]:
     if major not in {"7", "8"}:
         return False, f"Проверен установщик на РЕД ОС 7 и 8. Сейчас версия {info['version'] or 'неизвестна'}."
     return True, f"{info['pretty']}, {info['arch']}"
+
+
+def source_tree_ready() -> bool:
+    return (PROJECT_ROOT / "cameav" / "__main__.py").is_file() and (PROJECT_ROOT / "bin" / "cameav").is_file()
 
 
 def find_rpm() -> Path | None:
@@ -114,28 +121,88 @@ def short_evr(value: str) -> str:
     return value
 
 
+def _dependency_row(name: str) -> dict[str, str]:
+    current = installed_nevra(name)
+    if current:
+        return {
+            "name": name,
+            "detail": short_evr(current.removeprefix(name + "-")),
+            "state": "уже в системе",
+            "source": "установлен",
+        }
+    return {
+        "name": name,
+        "detail": "из репозитория РЕД ОС",
+        "state": "будет загружен",
+        "source": "репозиторий",
+    }
+
+
+def folder_plan() -> list[dict[str, str]]:
+    """Зависимости, и последней строкой оболочка."""
+    rows = [_dependency_row(name) for name in RUNTIME_PACKAGES]
+    rows.append(
+        {
+            "name": "ClamNTK",
+            "detail": "оболочка",
+            "state": "будет установлена после зависимостей",
+            "source": "эта папка",
+        }
+    )
+    return rows
+
+
 def package_plan(path: Path) -> list[dict[str, str]]:
     info = query_rpm_file(path)
-    rows = [
+    names = requirement_names(path)
+    ordered = [name for name in RUNTIME_PACKAGES if name in names]
+    ordered.extend(name for name in names if name not in ordered)
+    rows = [_dependency_row(name) for name in ordered]
+    rows.append(
         {
             "name": info["name"],
             "detail": info["label"],
-            "state": "будет установлен" if installed_nevra(info["name"]) is None else "будет переустановлен",
+            "state": "будет установлена после зависимостей"
+            if installed_nevra(info["name"]) is None
+            else "будет переустановлена после зависимостей",
             "source": "локальный пакет",
         }
-    ]
-    for name in requirement_names(path):
-        current = installed_nevra(name)
-        if current:
-            state = "уже в системе"
-            detail = short_evr(current.removeprefix(name + "-"))
-            source = "установлен"
-        else:
-            state = "будет загружен"
-            detail = "из репозитория РЕД ОС"
-            source = "репозиторий"
-        rows.append({"name": name, "detail": detail, "state": state, "source": source})
+    )
     return rows
+
+
+def write_source_install_script() -> Path:
+    """Скрипт для pkexec: dnf ставит ClamAV и зависимости, затем копируются файлы оболочки."""
+    root = shlex.quote(str(PROJECT_ROOT))
+    packages = " ".join(RUNTIME_PACKAGES)
+    body = f"""#!/bin/bash
+set -euo pipefail
+echo "ClamNTK: установка ClamAV и остальных зависимостей"
+if command -v stdbuf >/dev/null 2>&1; then
+  stdbuf -oL -eL dnf install -y {packages}
+else
+  dnf install -y {packages}
+fi
+echo "ClamNTK: зависимости готовы, ставится оболочка"
+ROOT={root}
+install -d /usr/share/cameav
+rm -rf /usr/share/cameav/cameav
+cp -a "$ROOT/cameav" /usr/share/cameav/cameav
+find /usr/share/cameav -type d -name __pycache__ -print0 | xargs -0 -r rm -rf
+install -D -m 755 "$ROOT/bin/cameav" /usr/bin/cameav
+install -D -m 755 "$ROOT/libexec/cameav-privileged" /usr/libexec/cameav-privileged
+install -D -m 644 "$ROOT/share/applications/cameav.desktop" /usr/share/applications/cameav.desktop
+install -D -m 644 "$ROOT/share/polkit/ru.redos.cameav.policy" /usr/share/polkit-1/actions/ru.redos.cameav.policy
+mkdir -p /usr/share/icons/hicolor
+cp -a "$ROOT/share/icons/hicolor/." /usr/share/icons/hicolor/
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+echo "ClamNTK установлен"
+"""
+    path = Path(f"/tmp/clamntk-install-{os.getuid()}.sh")
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+    return path
 
 
 def cameav_registered() -> str | None:
@@ -148,15 +215,18 @@ def files_copied_without_package() -> bool:
 
 def command_for(action: str, rpm_path: Path | None = None) -> list[str]:
     if action == "install":
-        if rpm_path is None:
-            raise RuntimeError("Не найден RPM-пакет ClamNTK.")
-        command = [
-            "dnf",
-            "install",
-            "-y",
-            "--setopt=localpkg_gpgcheck=0",
-            str(rpm_path),
-        ]
+        if rpm_path is not None:
+            command = [
+                "dnf",
+                "install",
+                "-y",
+                "--setopt=localpkg_gpgcheck=0",
+                str(rpm_path),
+            ]
+        elif source_tree_ready():
+            command = ["bash", str(write_source_install_script())]
+        else:
+            raise RuntimeError("Не найдены файлы оболочки ClamNTK.")
     elif action == "remove":
         command = ["dnf", "remove", "-y", "cameav"]
     else:
