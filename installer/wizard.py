@@ -30,6 +30,7 @@ from installer.engine import (
     files_copied_without_package,
     find_rpm,
     folder_plan,
+    clamav_present,
     installed_nevra,
     package_plan,
     query_rpm_file,
@@ -255,17 +256,17 @@ class SetupWindow(QMainWindow):
         layout.addWidget(title)
         layout.addWidget(lead)
         text = QLabel(
-            "Если на компьютере нет ClamAV, мастер сначала сам поставит его из репозитория "
-            "РЕД ОС вместе с Qt и polkit. Оболочка ставится только после этого и появляется "
-            "в меню «Администрирование»."
+            "Если на компьютере нет ClamAV, мастер сначала скачает официальную сборку "
+            "с clamav.net: в репозитории РЕД ОС такого пакета нет. Оболочка ставится "
+            "только после этого и появляется в меню «Администрирование»."
         )
         text.setWordWrap(True)
         text.setObjectName("body")
         layout.addWidget(text)
         if self.rpm_info:
-            note = ("ok", f"Локальный пакет: {self.rpm_info['label']}. Зависимости dnf поставит до него.")
+            note = ("ok", f"Локальный пакет: {self.rpm_info['label']}. ClamAV будет поставлен до него.")
         elif source_tree_ready():
-            note = ("ok", "Файла RPM нет. ClamAV и зависимости будут загружены до установки оболочки.")
+            note = ("ok", "ClamAV будет загружен с clamav.net до установки оболочки.")
         else:
             note = ("bad", self.rpm_error)
         layout.addWidget(banner(*note))
@@ -311,8 +312,8 @@ class SetupWindow(QMainWindow):
         title = QLabel("Состав установки")
         title.setObjectName("title")
         hint = QLabel(
-            "Сначала ставятся ClamAV и остальные зависимости. Оболочка — последней. "
-            "Уже стоящие пакеты dnf не скачивает заново. Для загрузки нужен интернет."
+            "Сначала ставится ClamAV. В репозитории РЕД ОС его нет, поэтому берётся сборка с clamav.net. "
+            "Оболочка — последней. Для загрузки нужен интернет."
         )
         hint.setWordWrap(True)
         hint.setObjectName("lead")
@@ -448,7 +449,7 @@ class SetupWindow(QMainWindow):
         if action == "install":
             self.progress_title.setText("Установка")
             self.progress_lead.setText(
-                "Подтвердите права администратора. Сначала будет установлен ClamAV и остальные зависимости, затем оболочка."
+                "Подтвердите права администратора. Сначала будет загружен и установлен ClamAV, затем оболочка."
             )
         else:
             self.progress_title.setText("Удаление")
@@ -509,7 +510,9 @@ class SetupWindow(QMainWindow):
         current = installed_nevra("clamav")
         if current:
             return True, "ClamAV", f"Уже установлен: {current}"
-        return True, "ClamAV", "Нет в системе. Установщик скачает его до оболочки."
+        if clamav_present():
+            return True, "ClamAV", "Команда clamscan уже есть в системе"
+        return True, "ClamAV", "Нет в системе. Установщик скачает сборку с clamav.net до оболочки."
 
     def _can_install(self) -> bool:
         ready = (self.rpm_path is not None and not self.rpm_error) or source_tree_ready()

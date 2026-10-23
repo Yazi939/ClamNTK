@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Запуск ClamNTK. Недостающие ClamAV и Qt ставятся из репозитория до открытия окна."""
+"""Запуск ClamNTK. Недостающие ClamAV и Qt ставятся до открытия окна."""
 
 from __future__ import annotations
 
@@ -24,28 +24,32 @@ def package_root() -> str:
     raise SystemExit(1)
 
 
-def missing_packages() -> list[str]:
-    missing: list[str] = []
+def needs_runtime() -> bool:
     if shutil.which("clamscan") is None:
-        missing.append("clamav")
+        return True
     try:
         import PyQt5  # noqa: F401
     except Exception:
-        missing.extend(["python3-qt5", "python3-qt5-base"])
-    return missing
+        return True
+    return False
 
 
 def ensure_runtime() -> None:
-    packages = missing_packages()
-    if not packages:
+    if not needs_runtime():
         return
-    command = ["dnf", "install", "-y", *packages]
+    root = package_root()
+    command = [
+        sys.executable,
+        "-c",
+        "import sys; sys.path.insert(0, sys.argv[1]); from cameav.runtime import install_missing; install_missing()",
+        root,
+    ]
     if os.geteuid() != 0:
         if not shutil.which("pkexec"):
-            sys.stderr.write("Нужны пакеты: %s\n" % " ".join(packages))
+            sys.stderr.write("Нужны права администратора, чтобы поставить ClamAV.\n")
             raise SystemExit(1)
         command.insert(0, "pkexec")
-    sys.stderr.write("ClamNTK устанавливает недостающие пакеты: %s\n" % " ".join(packages))
+    sys.stderr.write("ClamNTK ставит ClamAV и библиотеки интерфейса до открытия окна.\n")
     subprocess.check_call(command)
     os.execv(sys.executable, [sys.executable, *sys.argv])
 

@@ -9,6 +9,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from cameav.runtime import CLAMAV_VERSION, clamav_present
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # ClamAV идёт первым: оболочка ставится только после него.
 RUNTIME_PACKAGES = ("clamav", "python3", "python3-qt5", "python3-qt5-base", "polkit")
@@ -122,6 +124,20 @@ def short_evr(value: str) -> str:
 
 
 def _dependency_row(name: str) -> dict[str, str]:
+    if name == "clamav" and not installed_nevra(name):
+        if clamav_present():
+            return {
+                "name": name,
+                "detail": "clamscan найден",
+                "state": "уже в системе",
+                "source": "установлен",
+            }
+        return {
+            "name": name,
+            "detail": f"сборка {CLAMAV_VERSION}",
+            "state": "будет загружен",
+            "source": "clamav.net",
+        }
     current = installed_nevra(name)
     if current:
         return {
@@ -171,32 +187,34 @@ def package_plan(path: Path) -> list[dict[str, str]]:
     return rows
 
 
-def write_source_install_script() -> Path:
-    """Скрипт для pkexec: dnf ставит ClamAV и зависимости, затем копируются файлы оболочки."""
+def _shell_install_lines(rpm_path: Path | None) -> str:
+    if rpm_path is not None:
+        quoted = shlex.quote(str(rpm_path))
+        return f"dnf install -y --setopt=localpkg_gpgcheck=0 {quoted}"
+    root = "$ROOT"
+    return f"""install -d /usr/share/cameav
+rm -rf /usr/share/cameav/cameav
+cp -a "{root}/cameav" /usr/share/cameav/cameav
+find /usr/share/cameav -type d -name __pycache__ -print0 | xargs -0 -r rm -rf
+install -D -m 755 "{root}/bin/cameav" /usr/bin/cameav
+install -D -m 755 "{root}/libexec/cameav-privileged" /usr/libexec/cameav-privileged
+install -D -m 644 "{root}/share/applications/cameav.desktop" /usr/share/applications/cameav.desktop
+install -D -m 644 "{root}/share/polkit/ru.redos.cameav.policy" /usr/share/polkit-1/actions/ru.redos.cameav.policy
+mkdir -p /usr/share/icons/hicolor
+cp -a "{root}/share/icons/hicolor/." /usr/share/icons/hicolor/
+update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true"""
+
+
+def write_install_script(rpm_path: Path | None = None) -> Path:
+    """Скрипт для pkexec: сначала ClamAV, и только потом оболочка."""
     root = shlex.quote(str(PROJECT_ROOT))
-    packages = " ".join(RUNTIME_PACKAGES)
     body = f"""#!/bin/bash
 set -euo pipefail
-echo "ClamNTK: установка ClamAV и остальных зависимостей"
-if command -v stdbuf >/dev/null 2>&1; then
-  stdbuf -oL -eL dnf install -y {packages}
-else
-  dnf install -y {packages}
-fi
-echo "ClamNTK: зависимости готовы, ставится оболочка"
 ROOT={root}
-install -d /usr/share/cameav
-rm -rf /usr/share/cameav/cameav
-cp -a "$ROOT/cameav" /usr/share/cameav/cameav
-find /usr/share/cameav -type d -name __pycache__ -print0 | xargs -0 -r rm -rf
-install -D -m 755 "$ROOT/bin/cameav" /usr/bin/cameav
-install -D -m 755 "$ROOT/libexec/cameav-privileged" /usr/libexec/cameav-privileged
-install -D -m 644 "$ROOT/share/applications/cameav.desktop" /usr/share/applications/cameav.desktop
-install -D -m 644 "$ROOT/share/polkit/ru.redos.cameav.policy" /usr/share/polkit-1/actions/ru.redos.cameav.policy
-mkdir -p /usr/share/icons/hicolor
-cp -a "$ROOT/share/icons/hicolor/." /usr/share/icons/hicolor/
-update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
-gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from cameav.runtime import install_missing; install_missing()' "$ROOT"
+echo "ClamNTK: зависимости готовы, ставится оболочка"
+{_shell_install_lines(rpm_path)}
 echo "ClamNTK установлен"
 """
     path = Path(f"/tmp/clamntk-install-{os.getuid()}.sh")
@@ -215,7 +233,9 @@ def files_copied_without_package() -> bool:
 
 def command_for(action: str, rpm_path: Path | None = None) -> list[str]:
     if action == "install":
-        if rpm_path is not None:
+        if source_tree_ready():
+            command = ["bash", str(write_install_script(rpm_path))]
+        elif rpm_path is not None:
             command = [
                 "dnf",
                 "install",
@@ -223,8 +243,6 @@ def command_for(action: str, rpm_path: Path | None = None) -> list[str]:
                 "--setopt=localpkg_gpgcheck=0",
                 str(rpm_path),
             ]
-        elif source_tree_ready():
-            command = ["bash", str(write_source_install_script())]
         else:
             raise RuntimeError("Не найдены файлы оболочки ClamNTK.")
     elif action == "remove":
