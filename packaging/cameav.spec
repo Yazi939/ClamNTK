@@ -3,7 +3,7 @@ Version:        1.0.0
 Release:        1%{?dist}
 Summary:        Графическая оболочка ClamAV для РЕД ОС
 License:        MIT
-URL:            https://github.com/Yazi939/ClameNTK
+URL:            https://www.clamav.net/
 Group:          Applications/System
 Vendor:         ClameNTK
 BuildArch:      noarch

@@ -3,7 +3,7 @@
 
 На другом компьютере:
 
-    git clone -b dev https://github.com/Yazi939/ClameNTK.git
+    git clone -b dev <адрес репозитория>
     cd ClameNTK
     python3 packaging/publish.py          # поднять последнюю цифру версии
     python3 packaging/publish.py 1.2.0    # поставить номер явно
@@ -28,7 +28,14 @@ INIT = ROOT / "cameav" / "__init__.py"
 SPEC = ROOT / "packaging" / "cameav.spec"
 sys.path.insert(0, str(ROOT))
 
-from cameav.update import DEV_BRANCH, USER_BRANCH, parse_version  # noqa: E402
+from cameav.update import (  # noqa: E402
+    DEV_BRANCH,
+    USER_BRANCH,
+    github_coordinates,
+    parse_version,
+    remove_channel_file,
+    write_channel_file,
+)
 
 
 def read_version() -> str:
@@ -74,14 +81,7 @@ def ensure_dev_branch() -> None:
         raise SystemExit("В рабочей копии есть несохранённые правки. Сначала закоммитьте их.")
 
 
-def build_rpm(version: str) -> Path:
-    if shutil.which("rpmbuild") is None:
-        raise SystemExit("Не найден rpmbuild. Установите пакет rpm-build.")
-    top = Path(f"/tmp/cameav-rpm-{os.getuid()}")
-    for name in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
-        (top / name).mkdir(parents=True, exist_ok=True)
-    dist = subprocess.run(["rpm", "--eval", "%{dist}"], text=True, capture_output=True, check=False)
-    dist_tag = (dist.stdout or ".red80").strip() or ".red80"
+def _run_rpmbuild(top: Path, dist_tag: str) -> None:
     subprocess.check_call(
         [
             "rpmbuild",
@@ -96,6 +96,22 @@ def build_rpm(version: str) -> Path:
         ],
         cwd=ROOT,
     )
+
+
+def build_rpm(version: str) -> Path:
+    if shutil.which("rpmbuild") is None:
+        raise SystemExit("Не найден rpmbuild. Установите пакет rpm-build.")
+    top = Path(f"/tmp/cameav-rpm-{os.getuid()}")
+    for name in ("BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"):
+        (top / name).mkdir(parents=True, exist_ok=True)
+    dist = subprocess.run(["rpm", "--eval", "%{dist}"], text=True, capture_output=True, check=False)
+    dist_tag = (dist.stdout or ".red80").strip() or ".red80"
+    if not write_channel_file():
+        raise SystemExit("Не найден адрес GitHub у этой копии.")
+    try:
+        _run_rpmbuild(top, dist_tag)
+    finally:
+        remove_channel_file()
     found = list((top / "RPMS").rglob(f"cameav-{version}-*.rpm"))
     if not found:
         raise SystemExit("rpmbuild не создал пакет.")
@@ -116,6 +132,10 @@ def publish(version: str, package: Path) -> None:
     git("push", "origin", f"v{version}")
     if shutil.which("gh") is None:
         raise SystemExit(f"Пакет {package} собран, но нет команды gh, чтобы создать выпуск.")
+    found = github_coordinates()
+    if found is None:
+        raise SystemExit("Не найден адрес GitHub у этой копии.")
+    owner, repo = found
     subprocess.check_call(
         [
             "gh",
@@ -124,7 +144,7 @@ def publish(version: str, package: Path) -> None:
             f"v{version}",
             str(package),
             "--repo",
-            "Yazi939/ClameNTK",
+            f"{owner}/{repo}",
             "--target",
             USER_BRANCH,
             "--title",

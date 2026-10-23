@@ -4,3 +4,4 @@ build/
 dist/
 *.rpm
 *.log
+cameav/channel.json

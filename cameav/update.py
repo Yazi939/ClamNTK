@@ -8,17 +8,18 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
+import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-GITHUB_OWNER = "Yazi939"
-GITHUB_REPO = "ClameNTK"
 USER_BRANCH = "main"
 DEV_BRANCH = "dev"
 USER_AGENT = "ClameNTK"
+_CHANNEL = Path(__file__).resolve().parent / "channel.json"
 
 
 class UpdateError(RuntimeError):
@@ -48,8 +49,60 @@ def edition_title() -> str:
     return "Рабочая копия"
 
 
-def repo_url() -> str:
-    return f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
+def github_coordinates() -> tuple[str, str] | None:
+    """Адрес репозитория берётся из git или из файла поставки, не из исходников."""
+    remote = _coordinates_from_git()
+    if remote is not None:
+        return remote
+    if not _CHANNEL.is_file():
+        return None
+    try:
+        data = json.loads(_CHANNEL.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    owner = str(data.get("owner") or "").strip()
+    repo = str(data.get("repo") or "").strip()
+    if owner and repo:
+        return owner, repo
+    return None
+
+
+def write_channel_file() -> bool:
+    """Файл поставки для установленного пакета. В git он не входит."""
+    found = _coordinates_from_git()
+    if found is None:
+        return False
+    owner, repo = found
+    _CHANNEL.write_text(json.dumps({"owner": owner, "repo": repo}, ensure_ascii=False) + "\n", encoding="utf-8")
+    return True
+
+
+def remove_channel_file() -> None:
+    _CHANNEL.unlink(missing_ok=True)
+
+
+def repo_url() -> str | None:
+    found = github_coordinates()
+    if found is None:
+        return None
+    owner, repo = found
+    return f"https://github.com/{owner}/{repo}"
+
+
+def _coordinates_from_git() -> tuple[str, str] | None:
+    root = Path(__file__).resolve().parents[1]
+    try:
+        output = subprocess.check_output(
+            ["git", "-C", str(root), "remote", "get-url", "origin"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    match = re.search(r"github\.com[:/]([^/:\s]+)/([^/\s]+?)(?:\.git)?$", output)
+    if match is None:
+        return None
+    return match.group(1), match.group(2)
 
 
 def parse_version(text: str) -> tuple[int, ...]:
@@ -91,7 +144,11 @@ def _request(url: str) -> bytes:
 
 
 def fetch_latest() -> AppRelease:
-    payload = _request(f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest")
+    found = github_coordinates()
+    if found is None:
+        raise UpdateError("Для этой копии не задан репозиторий обновлений.")
+    owner, repo = found
+    payload = _request(f"https://api.github.com/repos/{owner}/{repo}/releases/latest")
     try:
         data = json.loads(payload.decode("utf-8"))
     except json.JSONDecodeError as exc:

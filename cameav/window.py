@@ -601,9 +601,11 @@ class MainWindow(QMainWindow):
     def _edition_hint(self) -> str:
         if edition() == "user":
             return "Эта копия установлена как программа. Новая версия скачивается с GitHub и ставится пакетом."
+        address = repo_url()
+        clone = f"git clone -b dev {address}.git" if address else "git clone -b dev <адрес репозитория>"
         return (
             "Это рабочая копия для доработки. На другом компьютере её забирают так: "
-            f"git clone -b dev {repo_url()}.git. "
+            f"{clone}. "
             "Пользователям отдаётся выпуск ветки main: python3 packaging/publish.py"
         )
 
