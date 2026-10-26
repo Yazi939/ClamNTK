@@ -123,6 +123,13 @@ def build_rpm(version: str) -> Path:
     return target
 
 
+def clamav_asset() -> list[Path]:
+    path = Path("/tmp/clamav-1.4.6.linux.x86_64.rpm")
+    if path.is_file() and path.stat().st_size > 1_000_000:
+        return [path]
+    return []
+
+
 def signature_assets() -> list[Path]:
     base = Path("/usr/local/share/clamav")
     assets: list[Path] = []
@@ -154,7 +161,7 @@ def publish(version: str, package: Path) -> None:
             "create",
             f"v{version}",
             str(package),
-            *[str(path) for path in signature_assets()],
+            *[str(path) for path in [*signature_assets(), *clamav_asset()]],
             "--repo",
             f"{owner}/{repo}",
             "--target",
@@ -165,6 +172,7 @@ def publish(version: str, package: Path) -> None:
             (
                 f"Сборка {version} для РЕД ОС.\n\n"
                 "Если сервер баз ClamAV отвечает лимитом CDN, программа берёт пакеты сигнатур из этого выпуска.\n"
+                "Установка больше не обрывается через минуту, если загрузка идёт медленно.\n"
                 "При запуске программа сама предлагает поставить новый выпуск."
             ),
         ],

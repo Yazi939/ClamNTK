@@ -5,8 +5,11 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import socket
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -65,12 +68,35 @@ def version_is_older(found: str, required: str) -> bool:
     return _version_tuple(found) < _version_tuple(required)
 
 
+# Короткий таймаут dnf обрывает установку на обычной сети: код 1 и timeout.
+DNF_OPTS = (
+    "--setopt=timeout=300",
+    "--setopt=minrate=100",
+    "--setopt=retries=10",
+    "--setopt=skip_if_unavailable=True",
+)
+DOWNLOAD_TIMEOUT = 300
+
+
+def dnf_install(packages: list[str], *, local: bool = False) -> None:
+    command = ["dnf", "install", "-y", *DNF_OPTS]
+    if local:
+        command.append("--setopt=localpkg_gpgcheck=0")
+    command.extend(packages)
+    subprocess.check_call(command)
+
+
 def repo_has_clamav() -> bool:
-    completed = subprocess.run(
-        ["dnf", "-q", "repoquery", "--available", "clamav"],
-        text=True,
-        capture_output=True,
-    )
+    try:
+        completed = subprocess.run(
+            ["dnf", "-q", *DNF_OPTS, "repoquery", "--available", "clamav"],
+            text=True,
+            capture_output=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        print("ClamNTK: репозиторий не ответил вовремя, сборка ClamAV будет скачана отдельно", flush=True)
+        return False
     return completed.returncode == 0 and bool(completed.stdout.strip())
 
 
@@ -84,29 +110,97 @@ def official_rpm_url(arch: str | None = None) -> str:
     )
 
 
-def _download(url: str, dest: Path) -> None:
-    print(f"ClamNTK: загрузка {url}", flush=True)
-    request = urllib.request.Request(url, headers={"User-Agent": "ClamNTK"})
-    with urllib.request.urlopen(request, timeout=60) as response, dest.open("wb") as handle:
-        total = int(response.headers.get("Content-Length") or 0)
-        done = 0
-        reported = -1
-        while True:
-            chunk = response.read(256 * 1024)
-            if not chunk:
-                break
-            handle.write(chunk)
-            done += len(chunk)
-            milestone = done // (4 * 1024 * 1024)
-            if milestone != reported:
-                reported = milestone
-                if total:
-                    print(
-                        f"ClamNTK: загружено {done // (1024 * 1024)} из {total // (1024 * 1024)} МиБ",
-                        flush=True,
-                    )
-                else:
-                    print(f"ClamNTK: загружено {done // (1024 * 1024)} МиБ", flush=True)
+def clamav_rpm_urls(arch: str | None = None) -> list[str]:
+    """Сначала сайт ClamAV, затем копия в выпуске ClamNTK, если сайт не ответил."""
+    machine = arch or platform.machine()
+    name = f"clamav-{CLAMAV_VERSION}.linux.{machine}.rpm"
+    urls = [
+        "https://www.clamav.net/downloads/production/" + name,
+    ]
+    try:
+        from cameav.update import github_coordinates
+
+        found = github_coordinates()
+    except Exception:
+        found = None
+    owner, repo = found or ("Yazi939", "ClamNTK")
+    urls.append(f"https://github.com/{owner}/{repo}/releases/latest/download/{name}")
+    return urls
+
+
+def _download_once(url: str, dest: Path) -> None:
+    have = dest.stat().st_size if dest.is_file() else 0
+    headers = {"User-Agent": "ClamNTK"}
+    if have:
+        headers["Range"] = f"bytes={have}-"
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        response = urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 416 and have > 1_000_000:
+            return
+        raise
+    with response:
+        status = getattr(response, "status", 200)
+        if status == 200:
+            have = 0
+        mode = "ab" if status != 200 and have else "wb"
+        incoming = int(response.headers.get("Content-Length") or 0)
+        total = incoming + have if status != 200 else incoming
+        done = have
+        reported = done // (4 * 1024 * 1024)
+        print(f"ClamNTK: загрузка {url}", flush=True)
+        with dest.open(mode) as handle:
+            while True:
+                chunk = response.read(256 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                done += len(chunk)
+                milestone = done // (4 * 1024 * 1024)
+                if milestone != reported:
+                    reported = milestone
+                    if total:
+                        print(
+                            f"ClamNTK: загружено {done // (1024 * 1024)} из {max(total // (1024 * 1024), 1)} МиБ",
+                            flush=True,
+                        )
+                    else:
+                        print(f"ClamNTK: загружено {done // (1024 * 1024)} МиБ", flush=True)
+        if total and done < total:
+            raise RuntimeError(f"загрузка неполная, {done // (1024 * 1024)} из {max(total // (1024 * 1024), 1)} МиБ")
+    if dest.stat().st_size < 1_000_000:
+        dest.unlink(missing_ok=True)
+        raise RuntimeError("Скачанный файл слишком маленький")
+
+
+def _download(url: str, dest: Path, attempts: int = 4) -> None:
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            _download_once(url, dest)
+            return
+        except urllib.error.HTTPError as exc:
+            if exc.code in {403, 404, 410}:
+                raise
+            last_error = exc
+            print(
+                f"ClamNTK: загрузка прервалась ({exc}). Попытка {attempt} из {attempts}.",
+                flush=True,
+            )
+            if attempt < attempts:
+                time.sleep(min(5 * attempt, 15))
+        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError, RuntimeError) as exc:
+            last_error = exc
+            print(
+                f"ClamNTK: загрузка прервалась ({exc}). Попытка {attempt} из {attempts}.",
+                flush=True,
+            )
+            if attempt < attempts:
+                time.sleep(min(5 * attempt, 15))
+    raise RuntimeError(
+        "Загрузка оборвалась по времени. Нажмите «Установить» ещё раз: уже скачанная часть сохранится."
+    ) from last_error
 
 
 DATABASE_DIR = Path("/usr/local/share/clamav")
@@ -217,25 +311,29 @@ def install_clamav() -> None:
         )
     if repo_has_clamav():
         print("ClamNTK: установка пакета clamav из репозитория РЕД ОС", flush=True)
-        subprocess.check_call(["dnf", "install", "-y", "clamav"])
+        dnf_install(["clamav"])
     else:
         print("ClamNTK: в репозитории РЕД ОС нет пакета clamav", flush=True)
-        url = official_rpm_url()
         dest = Path(f"/tmp/clamav-{CLAMAV_VERSION}.linux.{platform.machine()}.rpm")
-        try:
-            _download(url, dest)
-        except Exception as exc:
-            raise RuntimeError(f"Не удалось скачать ClamAV: {exc}") from exc
-        subprocess.check_call(
-            ["dnf", "install", "-y", "--setopt=localpkg_gpgcheck=0", str(dest)]
-        )
+        saved: Exception | None = None
+        for url in clamav_rpm_urls():
+            try:
+                _download(url, dest)
+                saved = None
+                break
+            except Exception as exc:
+                saved = exc
+                print(f"ClamNTK: адрес не ответил, пробую следующий", flush=True)
+        if saved is not None:
+            raise RuntimeError(f"Не удалось скачать ClamAV: {saved}") from saved
+        dnf_install([str(dest)], local=True)
     if not clamav_present():
         raise RuntimeError("ClamAV установлен, но команда clamscan не найдена.")
 
 
 def install_missing() -> None:
     print("ClamNTK: установка библиотек интерфейса", flush=True)
-    subprocess.check_call(["dnf", "install", "-y", *REPO_PACKAGES])
+    dnf_install(list(REPO_PACKAGES))
     install_clamav()
     prepare_clamav_runtime()
 

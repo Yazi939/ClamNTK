@@ -209,7 +209,17 @@ def download_release(release: AppRelease) -> Path:
 
 
 def install_command(rpm_path: Path) -> list[str]:
-    command = ["dnf", "install", "-y", "--setopt=localpkg_gpgcheck=0", str(rpm_path)]
+    command = [
+        "dnf",
+        "install",
+        "-y",
+        "--setopt=timeout=300",
+        "--setopt=minrate=100",
+        "--setopt=retries=10",
+        "--setopt=skip_if_unavailable=True",
+        "--setopt=localpkg_gpgcheck=0",
+        str(rpm_path),
+    ]
     if os.geteuid() == 0:
         return command
     pkexec = shutil.which("pkexec")

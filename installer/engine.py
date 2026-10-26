@@ -190,7 +190,11 @@ def package_plan(path: Path) -> list[dict[str, str]]:
 def _shell_install_lines(rpm_path: Path | None) -> str:
     if rpm_path is not None:
         quoted = shlex.quote(str(rpm_path))
-        return f"dnf install -y --setopt=localpkg_gpgcheck=0 {quoted}"
+        return (
+            "dnf install -y --setopt=timeout=300 --setopt=minrate=100 "
+            "--setopt=retries=10 --setopt=skip_if_unavailable=True "
+            f"--setopt=localpkg_gpgcheck=0 {quoted}"
+        )
     root = "$ROOT"
     return f"""install -d /usr/share/cameav
 rm -rf /usr/share/cameav/cameav

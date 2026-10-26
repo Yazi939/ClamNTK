@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import urllib.request
 from pathlib import Path
 
@@ -73,7 +74,7 @@ def database_dir_usable(directory: Path) -> bool:
 
 def _download(url: str, dest: Path, label: str) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=60) as response, dest.open("wb") as handle:
+    with urllib.request.urlopen(request, timeout=300) as response, dest.open("wb") as handle:
         total = int(response.headers.get("Content-Length") or 0)
         done = 0
         reported = 0
@@ -100,10 +101,19 @@ def _install_one(directory: Path, name: str, base_url: str) -> bool:
     partial = directory / f".{name}.cvd.partial"
     url = f"{base_url}/{name}.cvd"
     print(f"ClamNTK: загрузка {name}.cvd", flush=True)
-    try:
-        _download(url, partial, f"{name}.cvd")
-    except Exception as exc:
-        print(f"ClamNTK: не удалось скачать {name}.cvd: {exc}", flush=True)
+    saved: Exception | None = None
+    for attempt in range(1, 5):
+        try:
+            _download(url, partial, f"{name}.cvd")
+            saved = None
+            break
+        except Exception as exc:
+            saved = exc
+            print(f"ClamNTK: {name}.cvd прервался ({exc}). Попытка {attempt} из 4.", flush=True)
+            if attempt < 4:
+                time.sleep(min(5 * attempt, 15))
+    if saved is not None:
+        print(f"ClamNTK: не удалось скачать {name}.cvd: {saved}", flush=True)
         partial.unlink(missing_ok=True)
         return signature_ok(target, name) if target.is_file() else False
     if not signature_ok(partial, name):

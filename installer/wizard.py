@@ -408,8 +408,14 @@ class SetupWindow(QMainWindow):
         elif index == 2:
             self.next_button.setText("Переустановить" if cameav_registered() else "Установить")
             self.next_button.setEnabled(self._can_install() and not running)
+        elif self.success and self.action != "remove":
+            self.next_button.setText("Запустить ClamNTK")
+            self.next_button.setEnabled(not running)
+        elif not self.success and self.action == "install":
+            self.next_button.setText("Повторить")
+            self.next_button.setEnabled(not running)
         else:
-            self.next_button.setText("Запустить ClamNTK" if self.success and self.action != "remove" else "Закрыть")
+            self.next_button.setText("Закрыть")
             self.next_button.setEnabled(not running)
 
     def go_back(self) -> None:
@@ -427,6 +433,11 @@ class SetupWindow(QMainWindow):
             return
         if self.success and self.action == "install":
             subprocess.Popen(["cameav"], start_new_session=True)
+            self.close()
+            return
+        if not self.success and self.action == "install":
+            self.start_transaction("install")
+            return
         self.close()
 
     def remove_package(self) -> None:
@@ -490,10 +501,16 @@ class SetupWindow(QMainWindow):
                 self.progress_lead.setText("Пункт появится в меню приложений. Можно запустить программу сразу.")
             return
         self.success = False
+        log_text = self.log.toPlainText().lower()
         if code in {126, 127}:
             text = "Права администратора не получены."
+        elif "timeout" in log_text or "timed out" in log_text or "таймаут" in log_text:
+            text = (
+                "Загрузка оборвалась по времени. Нажмите «Установить» ещё раз: "
+                "уже скачанная часть сохранится."
+            )
         else:
-            text = f"dnf завершился с кодом {code}. Текст выше подскажет причину."
+            text = f"Команда завершилась с кодом {code}. Текст выше подскажет причину."
         self.progress_title.setText("Не выполнено")
         self.progress_lead.setText(text)
 
