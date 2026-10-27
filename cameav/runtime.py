@@ -268,6 +268,15 @@ def _give_database(directory: Path) -> None:
     directory.chmod(0o755)
     for child in directory.rglob("*"):
         shutil.chown(child, user="clamav", group="clamav")
+        # CVD должны читаться и обычным пользователем: иначе clamscan/clamd
+        # завершаются с кодом 2 и «Access denied».
+        try:
+            if child.is_dir():
+                child.chmod(0o755)
+            elif child.is_file():
+                child.chmod(0o644)
+        except OSError:
+            pass
 
 
 def prepare_clamav_runtime() -> None:

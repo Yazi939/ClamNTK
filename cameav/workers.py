@@ -148,7 +148,7 @@ class ScanWorker(QObject):
             if self._stop:
                 break
             stripped = raw.strip()
-            if stripped.startswith("ERROR:") or "No supported database" in stripped or "cli_loaddbdir" in stripped:
+            if _scan_notice(stripped):
                 noticed.append(stripped)
             kind = consume_scan_line(state, raw)
             if kind == "threat":
@@ -176,7 +176,8 @@ class ScanWorker(QObject):
             self.file_seen.emit(state.current_file)
         scanned, infected, errors = final_counts(state)
         self.stats.emit(scanned, infected, errors)
-        if not self._stop and code not in (0, 1):
+        # ClamAV: 0 чисто, 1 найдены угрозы, 2 были ошибки (часто недоступные файлы).
+        if not self._stop and not _scan_usable(code, scanned, infected):
             self.failed.emit(_scan_failure_text(noticed, code))
             return
         result = self._empty_result(cancelled=self._stop)
@@ -229,13 +230,49 @@ class ScanWorker(QObject):
             return None
 
 
+def _scan_notice(line: str) -> bool:
+    lowered = line.lower()
+    return (
+        line.startswith("ERROR:")
+        or line.startswith("LibClamAV Error:")
+        or "No supported database" in line
+        or "cli_loaddbdir" in line
+        or "can't connect" in lowered
+        or "could not connect" in lowered
+        or "access denied" in lowered
+    )
+
+
+def _scan_usable(code: int, scanned: int, infected: int) -> bool:
+    if code in (0, 1):
+        return True
+    # Код 2: проверка шла, но часть файлов/путей была недоступна.
+    return code == 2 and (scanned > 0 or infected > 0)
+
+
 def _scan_failure_text(lines: list[str], code: int) -> str:
     blob = "\n".join(lines)
+    lowered = blob.lower()
     if "No supported database" in blob or "cli_loaddbdir" in blob:
         return "Нет баз сигнатур. Откройте «Обновления» и нажмите «Обновить базы», иначе проверка файлы не смотрит."
+    if "can't connect" in lowered or "could not connect" in lowered:
+        return (
+            "Служба проверки не ответила. Закройте ClamNTK и запустите снова, "
+            "затем повторите проверку."
+        )
+    if "access denied" in lowered and ("database" in lowered or "datadir" in lowered):
+        return (
+            "Нет доступа к каталогу баз сигнатур. Откройте «Обновления» и нажмите «Обновить базы» — "
+            "права на каталог будут выставлены заново."
+        )
     for line in reversed(lines):
-        if line.startswith("ERROR:"):
+        if line.startswith("ERROR:") or line.startswith("LibClamAV Error:"):
             return "Проверка не выполнена.\n" + line
+    if code == 2:
+        return (
+            "Проверка завершилась с кодом 2: ClamAV не смог открыть базы или файлы. "
+            "Откройте «Обновления», нажмите «Обновить базы» и повторите проверку."
+        )
     return f"Проверка завершилась с кодом {code} и не просмотрела файлы."
 
 

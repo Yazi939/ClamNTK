@@ -193,6 +193,7 @@ def update_databases(datadir: str | None = None, base_url: str | None = None) ->
         print(f"ClamNTK: freshclam не запустился: {exc}", flush=True)
         code, output = 2, ""
     if code in (0, 1) and database_dir_usable(directory):
+        _readable_databases(directory)
         return code
     lowered = output.lower()
     limited = any(marker in lowered for marker in ("429", "403", "cool-down", "cdn", "rate limit"))
@@ -201,11 +202,29 @@ def update_databases(datadir: str | None = None, base_url: str | None = None) ->
     else:
         print("ClamNTK: freshclam не записал базы сигнатур.", flush=True)
     if database_dir_usable(directory):
+        _readable_databases(directory)
         print(KEPT_MARK, flush=True)
         return 0
     print("ClamNTK: беру официальные пакеты из выпуска ClamNTK.", flush=True)
     if install_release_databases(directory, base_url=base_url):
+        _readable_databases(directory)
         print(SAVED_MARK, flush=True)
         return 0
     print("ClamNTK: запасные пакеты тоже не скачались.", flush=True)
     return code if code not in (0, 1) else 1
+
+
+def _readable_databases(directory: Path) -> None:
+    """Сделать CVD читаемыми для обычного пользователя — иначе проверка даёт код 2."""
+    try:
+        directory.chmod(0o755)
+    except OSError:
+        pass
+    for child in directory.iterdir():
+        try:
+            if child.is_file() and child.suffix.lower() in {".cvd", ".cld", ".cdb"}:
+                child.chmod(0o644)
+                if os.geteuid() == 0:
+                    shutil.chown(child, user="clamav", group="clamav")
+        except (OSError, LookupError):
+            continue

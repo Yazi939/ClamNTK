@@ -1508,6 +1508,9 @@ class MainWindow(QMainWindow):
         elif infected:
             text = f"Найдено угроз: {infected}. Их можно изолировать или удалить."
             color = "#C8102E"
+        elif errors:
+            text = f"Угроз не обнаружено. Недоступных файлов: {errors}."
+            color = "#8A5A00"
         else:
             text = "Угроз не обнаружено."
             color = "#0E8A4A"
