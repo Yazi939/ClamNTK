@@ -1,5 +1,5 @@
 Name:           cameav
-Version:        1.0.6
+Version:        1.0.7
 Release:        1%{?dist}
 Summary:        Графическая оболочка ClamAV для РЕД ОС
 License:        MIT
@@ -60,6 +60,8 @@ gtk-update-icon-cache -f -t /usr/share/icons/hicolor &> /dev/null || :
 /usr/share/icons/hicolor/scalable/apps/cameav.svg
 
 %changelog
+* Tue Oct 27 2026 ClamNTK <cameav@localhost> - 1.0.7-1
+- Выпуск ClamNTK 1.0.7
 * Tue Oct 27 2026 ClamNTK <cameav@localhost> - 1.0.6-1
 - Выпуск ClamNTK 1.0.6
 * Mon Oct 26 2026 ClamNTK <cameav@localhost> - 1.0.5-1
