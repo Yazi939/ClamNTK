@@ -1432,7 +1432,16 @@ class MainWindow(QMainWindow):
                 self.update_log.appendPlainText("Программа ClamAV обновлена. Закройте ClamNTK и откройте снова.")
                 self.db_note.setText("Программа ClamAV обновлена. Закройте ClamNTK и откройте снова, чтобы проверка взяла новую сборку.")
             else:
-                self._tell("Обновление ClamAV", f"Сборка не установилась, код {code}. Подробности в журнале обновления.")
+                log = self.update_log.toPlainText()
+                if "Неизвестная команда: clamav" in log:
+                    self._tell(
+                        "Обновление ClamAV",
+                        "Служебный компонент на этом компьютере старый и не умеет ставить ClamAV. "
+                        "Поставьте ClamNTK 1.0.7 или новее из выпуска GitHub, закройте программу и откройте снова, "
+                        "затем нажмите «Обновить ClamAV» ещё раз.",
+                    )
+                else:
+                    self._tell("Обновление ClamAV", f"Сборка не установилась, код {code}. Подробности в журнале обновления.")
         elif code not in (0, 1):
             hint = self._freshclam_hint()
             text = f"freshclam завершился с кодом {code}."

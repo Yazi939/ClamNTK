@@ -30,6 +30,7 @@ find %{buildroot} -name '*.pyc' -delete
 install -D -m 755 %{cameav_root}/bin/cameav %{buildroot}/usr/bin/cameav
 install -D -m 755 %{cameav_root}/bin/cameav-uninstall %{buildroot}/usr/bin/cameav-uninstall
 install -D -m 755 %{cameav_root}/libexec/cameav-privileged %{buildroot}/usr/libexec/cameav-privileged
+install -D -m 755 %{cameav_root}/libexec/cameav-privileged %{buildroot}/usr/share/cameav/libexec/cameav-privileged
 rm -rf %{buildroot}/usr/share/cameav/installer
 cp -a %{cameav_root}/installer %{buildroot}/usr/share/cameav/installer
 find %{buildroot}/usr/share/cameav/installer -type d -name __pycache__ -print0 | xargs -0 -r rm -rf

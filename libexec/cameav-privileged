@@ -114,11 +114,31 @@ def prepare_runtime() -> None:
     prepare_clamav_runtime()
 
 
+def refresh_helper() -> None:
+    """Подтянуть свежий helper из пакета оболочки, если он новее установленного."""
+    bundled = Path("/usr/share/cameav/libexec/cameav-privileged")
+    target = Path("/usr/libexec/cameav-privileged")
+    if not bundled.is_file():
+        return
+    try:
+        if target.is_file() and bundled.read_bytes() == target.read_bytes():
+            return
+    except OSError:
+        pass
+    try:
+        shutil.copy2(bundled, target)
+        os.chmod(target, 0o755)
+        print("ClamNTK: служебный компонент обновлён", flush=True)
+    except OSError as exc:
+        print(f"ClamNTK: не удалось обновить служебный компонент: {exc}", flush=True)
+
+
 def cmd_update(args: list[str]) -> None:
     try:
         prepare_runtime()
     except Exception as exc:
         die(f"Не удалось подготовить каталог баз ClamAV: {exc}")
+    refresh_helper()
     datadir = None
     if "--datadir" in args:
         index = args.index("--datadir")
@@ -135,6 +155,7 @@ def cmd_update(args: list[str]) -> None:
 def cmd_clamav(_args: list[str]) -> None:
     try:
         prepare_runtime()
+        refresh_helper()
         from cameav.runtime import install_clamav
 
         install_clamav()

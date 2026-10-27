@@ -551,8 +551,62 @@ def build_daemon_scan_command(config_path: Path, targets: list[str]) -> list[str
     return command
 
 
+def helper_supports(command: str) -> bool:
+    """Старый /usr/libexec/cameav-privileged мог остаться без новых команд."""
+    path = helper_path()
+    if path is None:
+        return False
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return f'"{command}": cmd_{command}' in text
+
+
 def build_engine_upgrade_command() -> list[str]:
-    return admin_command(["clamav"])
+    """Обновить программу ClamAV до рекомендуемой сборки.
+
+    Если служебный helper уже умеет команду clamav — зовём его.
+    Иначе ставим через скрипт с актуальным кодом из /usr/share/cameav:
+    на части ПК helper остался от старой версии, а оболочка уже новая.
+    """
+    if helper_supports("clamav"):
+        return admin_command(["clamav"])
+    return _engine_upgrade_script_command()
+
+
+def _engine_upgrade_script_command() -> list[str]:
+    root = app_root()
+    script = Path(f"/tmp/clamntk-engine-{os.getuid()}.sh")
+    helper_src = root / "libexec" / "cameav-privileged"
+    script.write_text(
+        "\n".join(
+            [
+                "#!/bin/bash",
+                "set -euo pipefail",
+                f'export PYTHONPATH="{root}${{PYTHONPATH:+:$PYTHONPATH}}"',
+                "python3 - <<'PY'",
+                "from cameav.runtime import install_clamav, prepare_clamav_runtime",
+                "prepare_clamav_runtime()",
+                "install_clamav()",
+                'print("ClamNTK: программа ClamAV обновлена", flush=True)',
+                "PY",
+                f'src="{helper_src}"',
+                'if [[ -f "$src" ]]; then',
+                "  install -D -m 755 \"$src\" /usr/libexec/cameav-privileged",
+                "fi",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    script.chmod(0o700)
+    if os.geteuid() == 0:
+        return ["bash", str(script)]
+    pkexec = which("pkexec")
+    if not pkexec:
+        raise RuntimeError("Не найден pkexec. Установите пакет polkit.")
+    return [pkexec, "bash", str(script)]
 
 
 def build_update_command(engine: EngineInfo) -> list[str]:

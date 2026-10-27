@@ -135,6 +135,12 @@ def signature_assets() -> list[Path]:
     assets: list[Path] = []
     for name in ("bytecode.cvd", "daily.cvd", "main.cvd"):
         path = base / name
+        if not path.is_file() and name == "daily.cvd":
+            # freshclam мог заменить daily.cvd на daily.cld; для выпуска берём запасной .cvd.
+            for fallback in (Path("/tmp/daily.cvd"), base / "daily.cld"):
+                if fallback.is_file() and fallback.stat().st_size > 1_000_000:
+                    path = fallback
+                    break
         if not path.is_file():
             raise SystemExit(f"Нет {path}, без него другой компьютер не получит базы при лимите CDN.")
         assets.append(path)
@@ -171,9 +177,9 @@ def publish(version: str, package: Path) -> None:
             "--notes",
             (
                 f"Сборка {version} для РЕД ОС.\n\n"
-                "Код 2 у проверки больше не обрывает результат: если файлы уже просмотрены, "
-                "показывается итог, а недоступные пути идут отдельно.\n"
-                "После обновления баз пакеты сигнатур снова читаются обычным пользователем.\n"
+                "Обновление программы ClamAV больше не падает с «Неизвестная команда: clamav», "
+                "если служебный helper на компьютере остался от старой версии.\n"
+                "Код 2 у проверки не обрывает результат, если файлы уже просмотрены.\n"
                 "Если сервер баз ClamAV отвечает лимитом CDN, программа берёт пакеты сигнатур из этого выпуска.\n"
                 "При запуске программа сама предлагает поставить новый выпуск."
             ),
