@@ -8,8 +8,10 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import socket
 import subprocess
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from cameav.update import USER_AGENT, github_coordinates
 NAMES = ("bytecode", "daily", "main")
 _VERSION = re.compile(r"^ClamAV-VDB:[^:]*:(\d+):")
 _MIN_SIZE = {"bytecode": 10_000, "daily": 1_000_000, "main": 5_000_000}
+DOWNLOAD_TIMEOUT = 300
 SAVED_MARK = "ClamNTK: пакеты сигнатур сохранены из выпуска программы."
 KEPT_MARK = "ClamNTK: пакеты сигнатур на месте, лимит CDN не мешает проверке."
 
@@ -39,6 +42,15 @@ def read_cvd_version(path: Path) -> int | None:
     if match is None:
         return None
     return int(match.group(1))
+
+
+def database_path(directory: Path, name: str) -> Path | None:
+    """Путь к пакету: freshclam часто меняет .cvd на .cld."""
+    for extension in (".cvd", ".cld"):
+        path = directory / f"{name}{extension}"
+        if path.is_file() and read_cvd_version(path) is not None:
+            return path
+    return None
 
 
 def _sigtool() -> str | None:
@@ -69,31 +81,78 @@ def signature_ok(path: Path, name: str) -> bool:
 
 
 def database_dir_usable(directory: Path) -> bool:
-    return all(read_cvd_version(directory / f"{name}.cvd") is not None for name in ("main", "daily"))
+    return database_path(directory, "main") is not None and database_path(directory, "daily") is not None
 
 
-def _download(url: str, dest: Path, label: str) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=300) as response, dest.open("wb") as handle:
-        total = int(response.headers.get("Content-Length") or 0)
-        done = 0
-        reported = 0
-        while True:
-            chunk = response.read(256 * 1024)
-            if not chunk:
-                break
-            handle.write(chunk)
-            done += len(chunk)
-            milestone = done // (4 * 1024 * 1024)
-            if milestone > reported:
-                reported = milestone
-                if total:
-                    print(
-                        f"ClamNTK: {label} — {done // (1024 * 1024)} из {max(total // (1024 * 1024), 1)} МиБ",
-                        flush=True,
-                    )
-                else:
-                    print(f"ClamNTK: {label} — {done // (1024 * 1024)} МиБ", flush=True)
+def _download_once(url: str, dest: Path, label: str, minimum: int) -> None:
+    have = dest.stat().st_size if dest.is_file() else 0
+    headers = {"User-Agent": USER_AGENT}
+    if have:
+        headers["Range"] = f"bytes={have}-"
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        response = urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 416 and have >= minimum:
+            return
+        raise
+    with response:
+        status = getattr(response, "status", 200)
+        if status == 200:
+            have = 0
+        mode = "ab" if status != 200 and have else "wb"
+        incoming = int(response.headers.get("Content-Length") or 0)
+        total = incoming + have if status != 200 else incoming
+        done = have
+        reported = done // (4 * 1024 * 1024)
+        with dest.open(mode) as handle:
+            while True:
+                chunk = response.read(256 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                done += len(chunk)
+                milestone = done // (4 * 1024 * 1024)
+                if milestone != reported:
+                    reported = milestone
+                    if total:
+                        print(
+                            f"ClamNTK: {label} — {done // (1024 * 1024)} из {max(total // (1024 * 1024), 1)} МиБ",
+                            flush=True,
+                        )
+                    else:
+                        print(f"ClamNTK: {label} — {done // (1024 * 1024)} МиБ", flush=True)
+        if total and done < total:
+            raise RuntimeError(
+                f"загрузка неполная, {done // (1024 * 1024)} из {max(total // (1024 * 1024), 1)} МиБ"
+            )
+    if dest.stat().st_size < minimum:
+        dest.unlink(missing_ok=True)
+        raise RuntimeError("Скачанный файл слишком маленький")
+
+
+def _download(url: str, dest: Path, label: str, minimum: int, attempts: int = 4) -> None:
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            _download_once(url, dest, label, minimum)
+            return
+        except urllib.error.HTTPError as exc:
+            if exc.code in {403, 404, 410}:
+                raise
+            last_error = exc
+        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError, RuntimeError) as exc:
+            last_error = exc
+        print(
+            f"ClamNTK: {label} прервался ({last_error}). Попытка {attempt} из {attempts}.",
+            flush=True,
+        )
+        if attempt < attempts:
+            time.sleep(min(5 * attempt, 15))
+    raise RuntimeError(
+        f"{label}: загрузка оборвалась по времени. Нажмите «Обновить базы» ещё раз — "
+        "уже скачанная часть сохранится."
+    ) from last_error
 
 
 def _install_one(directory: Path, name: str, base_url: str) -> bool:
@@ -101,31 +160,33 @@ def _install_one(directory: Path, name: str, base_url: str) -> bool:
     partial = directory / f".{name}.cvd.partial"
     url = f"{base_url}/{name}.cvd"
     print(f"ClamNTK: загрузка {name}.cvd", flush=True)
-    saved: Exception | None = None
-    for attempt in range(1, 5):
-        try:
-            _download(url, partial, f"{name}.cvd")
-            saved = None
-            break
-        except Exception as exc:
-            saved = exc
-            print(f"ClamNTK: {name}.cvd прервался ({exc}). Попытка {attempt} из 4.", flush=True)
-            if attempt < 4:
-                time.sleep(min(5 * attempt, 15))
-    if saved is not None:
-        print(f"ClamNTK: не удалось скачать {name}.cvd: {saved}", flush=True)
-        partial.unlink(missing_ok=True)
-        return signature_ok(target, name) if target.is_file() else False
+    try:
+        _download(url, partial, f"{name}.cvd", _MIN_SIZE[name])
+    except Exception as exc:
+        print(f"ClamNTK: не удалось скачать {name}.cvd: {exc}", flush=True)
+        if not partial.is_file():
+            existing = database_path(directory, name)
+            return existing is not None and signature_ok(existing, name)
+        # частичный файл без подписи не используем как готовый пакет
+        if not signature_ok(partial, name):
+            return database_path(directory, name) is not None
     if not signature_ok(partial, name):
         print(f"ClamNTK: {name}.cvd не прошёл проверку подписи и не записан", flush=True)
         partial.unlink(missing_ok=True)
-        return False
+        return database_path(directory, name) is not None
     new_version = read_cvd_version(partial) or 0
-    old_version = read_cvd_version(target) or 0
-    if target.is_file() and old_version >= new_version:
+    existing = database_path(directory, name)
+    old_version = read_cvd_version(existing) if existing is not None else 0
+    old_version = old_version or 0
+    if existing is not None and old_version >= new_version:
         partial.unlink(missing_ok=True)
-        print(f"ClamNTK: местный {name}.cvd уже версии {old_version}", flush=True)
+        print(f"ClamNTK: местный {name} уже версии {old_version}", flush=True)
         return True
+    # Убрать устаревший .cld, иначе clamd может взять его вместо нового .cvd.
+    for extension in (".cvd", ".cld"):
+        stale = directory / f"{name}{extension}"
+        if stale != target and stale.is_file():
+            stale.unlink(missing_ok=True)
     os.replace(partial, target)
     os.chmod(target, 0o644)
     if os.geteuid() == 0:
@@ -196,9 +257,12 @@ def update_databases(datadir: str | None = None, base_url: str | None = None) ->
         _readable_databases(directory)
         return code
     lowered = output.lower()
-    limited = any(marker in lowered for marker in ("429", "403", "cool-down", "cdn", "rate limit"))
+    limited = any(
+        marker in lowered
+        for marker in ("429", "403", "cool-down", "cdn", "rate limit", "timed out", "timeout", "connection timed out")
+    )
     if limited:
-        print("ClamNTK: сервер ClamAV поставил лимит CDN и не отдал базы.", flush=True)
+        print("ClamNTK: сервер ClamAV не отдал базы вовремя или поставил лимит.", flush=True)
     else:
         print("ClamNTK: freshclam не записал базы сигнатур.", flush=True)
     if database_dir_usable(directory):
@@ -215,7 +279,7 @@ def update_databases(datadir: str | None = None, base_url: str | None = None) ->
 
 
 def _readable_databases(directory: Path) -> None:
-    """Сделать CVD читаемыми для обычного пользователя — иначе проверка даёт код 2."""
+    """Сделать CVD/CLD читаемыми для обычного пользователя — иначе проверка даёт код 2."""
     try:
         directory.chmod(0o755)
     except OSError:

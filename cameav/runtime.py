@@ -300,6 +300,9 @@ def prepare_clamav_runtime() -> None:
             text = _ensure_directive(text, "DatabaseOwner", "clamav")
             text = _ensure_directive(text, "DatabaseDirectory", str(DATABASE_DIR))
             text = _ensure_directive(text, "DatabaseMirror", "database.clamav.net")
+            # Короткие таймауты freshclam обрывают daily/main на обычной сети.
+            text = _ensure_directive(text, "ConnectTimeout", "90")
+            text = _ensure_directive(text, "ReceiveTimeout", "300")
         elif name == "clamd.conf":
             text = _ensure_directive(text, "DatabaseDirectory", str(DATABASE_DIR))
         if text != original:

@@ -388,6 +388,10 @@ def explain_freshclam(text: str, code: int) -> FreshclamReport:
             outdated=False,
             message="Сервер ClamAV ограничил обновление. Уже загруженные пакеты на месте, проверка может идти.",
         )
+    timed_out = any(
+        marker in lowered
+        for marker in ("timed out", "timeout", "connection timed out", "receive timeout", "download failed")
+    )
     if blocked and not downloaded:
         return FreshclamReport(
             ok=False,
@@ -396,6 +400,16 @@ def explain_freshclam(text: str, code: int) -> FreshclamReport:
                 "Сервер баз ClamAV не отдал файлы и просит подождать. "
                 "Это ограничение сети, в журнале оно выглядит как WARNING и код 403 или 429. "
                 "Нажмите «Обновить базы» ещё раз не раньше чем через час, без повторных нажатий подряд."
+            ),
+        )
+    if timed_out and not downloaded and "лимит CDN не мешает проверке" not in text and "сохранены из выпуска" not in text:
+        # Если базы уже на месте, update_databases вернёт KEPT_MARK выше по журналу.
+        return FreshclamReport(
+            ok=False,
+            outdated=outdated,
+            message=(
+                "Загрузка баз оборвалась по времени. Нажмите «Обновить базы» ещё раз: "
+                "если пакеты уже частично скачаны, загрузка продолжится, а не начнётся с нуля."
             ),
         )
     if code not in (0, 1) and not downloaded:
